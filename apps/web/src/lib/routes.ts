@@ -5,6 +5,9 @@ export const routes = {
   document: (tenant: string, system: string, documentId: string) =>
     `/${tenant}/s/${system}/docs/${documentId}`,
   build: (tenant: string, system: string) => `/${tenant}/s/${system}/build`,
+  coverage: (tenant: string, system: string) => `/${tenant}/s/${system}/coverage`,
+  decisions: (tenant: string, system: string, query?: string) =>
+    `/${tenant}/s/${system}/decisions${query ? `?q=${encodeURIComponent(query)}` : ""}`,
   sources: (tenant: string) => `/${tenant}/sources`,
   source: (tenant: string, sourceId: string) => `/${tenant}/sources/${sourceId}`,
   org: (tenant: string) => `/${tenant}/org`,

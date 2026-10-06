@@ -464,6 +464,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/t/{tenant_slug}/review-batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Batch
+         * @description 여러 개정판을 한 번에 검토 요청하거나 승인한다.
+         *
+         *     규칙은 한 건씩 할 때와 같고(권한, 작성자·검토자 분리, 상위 문서 먼저) 건마다 따로 판단한다.
+         *     안 되는 건은 사유와 함께 돌려주고 나머지는 처리한다.
+         */
+        post: operations["review_batch_api_t__tenant_slug__review_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/systems/{system_slug}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Decisions
+         * @description 이 체계의 초안에 남아 있는 〔조직 결정: …〕 항목.
+         */
+        get: operations["list_decisions_api_t__tenant_slug__systems__system_slug__decisions_get"];
+        put?: never;
+        /** Fill Decision */
+        post: operations["fill_decision_api_t__tenant_slug__systems__system_slug__decisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/t/{tenant_slug}/inbox": {
         parameters: {
             query?: never;
@@ -757,6 +801,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/t/{tenant_slug}/systems/{system_slug}/plans/{plan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit Plan
+         * @description 사람이 고친 설계안으로 바꾼다. 문서를 생성하기 전에만 할 수 있다.
+         */
+        put: operations["edit_plan_api_t__tenant_slug__systems__system_slug__plans__plan_id__put"];
+        post?: never;
+        /** Discard Plan */
+        delete: operations["discard_plan_api_t__tenant_slug__systems__system_slug__plans__plan_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/t/{tenant_slug}/systems/{system_slug}/plans/{plan_id}/write": {
         parameters: {
             query?: never;
@@ -777,18 +842,21 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/t/{tenant_slug}/systems/{system_slug}/plans/{plan_id}": {
+    "/api/t/{tenant_slug}/systems/{system_slug}/coverage": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Get Coverage
+         * @description 이 체계가 근거로 삼은 표준의 요건이 어느 문서에서 이행되는지.
+         */
+        get: operations["get_coverage_api_t__tenant_slug__systems__system_slug__coverage_get"];
         put?: never;
         post?: never;
-        /** Discard Plan */
-        delete: operations["discard_plan_api_t__tenant_slug__systems__system_slug__plans__plan_id__delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -936,6 +1004,49 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** BatchItemResult */
+        BatchItemResult: {
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            document: components["schemas"]["DocumentRef"] | null;
+            /** Ok */
+            ok: boolean;
+            /**
+             * Error
+             * @default
+             */
+            error: string;
+        };
+        /**
+         * BatchReviewIn
+         * @description 여러 개정판을 한 번에 검토 요청하거나 승인한다.
+         */
+        BatchReviewIn: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "submit" | "approve";
+            /** Revision Ids */
+            revision_ids: string[];
+            /**
+             * Comment
+             * @default
+             */
+            comment: string;
+        };
+        /** BatchReviewOut */
+        BatchReviewOut: {
+            /** Done */
+            done: number;
+            /** Failed */
+            failed: number;
+            /** Results */
+            results: components["schemas"]["BatchItemResult"][];
+        };
         /** Body_upload_source_api_t__tenant_slug__sources_post */
         Body_upload_source_api_t__tenant_slug__sources_post: {
             /** File */
@@ -1013,6 +1124,142 @@ export interface components {
             requirement_count: number;
             /** Unverified Count */
             unverified_count: number;
+        };
+        /** CoverageChapter */
+        CoverageChapter: {
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * CoverageDocument
+         * @description 요건을 인용한 문서. 승인판과 진행 중인 판이 함께 있으면 승인판 기준이다.
+         */
+        CoverageDocument: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Title */
+            title: string;
+            /** Doc Type */
+            doc_type: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "approved" | "in_review" | "draft";
+            /** Sections */
+            sections: string[];
+        };
+        /** CoverageOut */
+        CoverageOut: {
+            /** Sources */
+            sources: components["schemas"]["CoverageSource"][];
+        };
+        /** CoverageRequirement */
+        CoverageRequirement: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Clause Number */
+            clause_number: string;
+            /** Chapter */
+            chapter: string;
+            /** Obligation */
+            obligation: string;
+            /** Summary */
+            summary: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "covered" | "drafted" | "gap" | "excluded";
+            /** Reason */
+            reason: string;
+            /** Documents */
+            documents: components["schemas"]["CoverageDocument"][];
+        };
+        /** CoverageSource */
+        CoverageSource: {
+            source: components["schemas"]["SourceRef"];
+            /** Approved At */
+            approved_at: string | null;
+            /** Total */
+            total: number;
+            /** Excluded */
+            excluded: number;
+            /** Covered */
+            covered: number;
+            /** Drafted */
+            drafted: number;
+            /** Gaps */
+            gaps: number;
+            /** Chapters */
+            chapters: components["schemas"]["CoverageChapter"][];
+            /** Requirements */
+            requirements: components["schemas"]["CoverageRequirement"][];
+        };
+        /** DecisionFillIn */
+        DecisionFillIn: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+            /** Targets */
+            targets?: components["schemas"]["DecisionTarget"][] | null;
+        };
+        /** DecisionFillOut */
+        DecisionFillOut: {
+            /** Places */
+            places: number;
+            /** Documents */
+            documents: number;
+        };
+        /**
+         * DecisionGroup
+         * @description 같은 이름의 조직 결정 항목. 여러 문서에 걸쳐 있을 수 있다.
+         */
+        DecisionGroup: {
+            /** Label */
+            label: string;
+            /** Occurrences */
+            occurrences: components["schemas"]["DecisionOccurrence"][];
+        };
+        /** DecisionOccurrence */
+        DecisionOccurrence: {
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            document: components["schemas"]["DocumentRef"];
+            /** Section Key */
+            section_key: string;
+            /** Section Title */
+            section_title: string;
+            /** Before */
+            before: string;
+            /** After */
+            after: string;
+        };
+        /** DecisionTarget */
+        DecisionTarget: {
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            /** Section Key */
+            section_key: string;
         };
         /** DocTypeOut */
         DocTypeOut: {
@@ -1095,6 +1342,10 @@ export interface components {
             open_status: string | null;
             /** Open Version */
             open_version: string | null;
+            /** Open Revision Id */
+            open_revision_id: string | null;
+            /** Open Decisions */
+            open_decisions: number;
             /**
              * Updated At
              * Format: date-time
@@ -1227,6 +1478,39 @@ export interface components {
             /** Kind */
             kind?: ("company" | "division" | "team" | "project") | null;
         };
+        /**
+         * PlanEditIn
+         * @description 사람이 고친 설계안 전체. 문서를 생성하기 전에만 바꿀 수 있다.
+         */
+        PlanEditIn: {
+            /** Policies */
+            policies: components["schemas"]["PlanPolicyIn"][];
+        };
+        /** PlanInstructionIn */
+        PlanInstructionIn: {
+            /** Title */
+            title: string;
+            /**
+             * Purpose
+             * @default
+             */
+            purpose: string;
+            /**
+             * Requirements
+             * @default []
+             */
+            requirements: string[];
+            /**
+             * Integration Note
+             * @default
+             */
+            integration_note: string;
+            /**
+             * Templates
+             * @default []
+             */
+            templates: string[];
+        };
         /** PlanNodeOut */
         PlanNodeOut: {
             /** Path */
@@ -1289,6 +1573,51 @@ export interface components {
             run: components["schemas"]["RunOut"] | null;
             /** Actions */
             actions: string[];
+        };
+        /** PlanPolicyIn */
+        PlanPolicyIn: {
+            /** Title */
+            title: string;
+            /**
+             * Purpose
+             * @default
+             */
+            purpose: string;
+            /**
+             * Requirements
+             * @default []
+             */
+            requirements: string[];
+            /**
+             * Procedures
+             * @default []
+             */
+            procedures: components["schemas"]["PlanProcedureIn"][];
+        };
+        /** PlanProcedureIn */
+        PlanProcedureIn: {
+            /** Title */
+            title: string;
+            /**
+             * Purpose
+             * @default
+             */
+            purpose: string;
+            /**
+             * Requirements
+             * @default []
+             */
+            requirements: string[];
+            /**
+             * Integration Note
+             * @default
+             */
+            integration_note: string;
+            /**
+             * Instructions
+             * @default []
+             */
+            instructions: components["schemas"]["PlanInstructionIn"][];
         };
         /** PlanStartIn */
         PlanStartIn: {
@@ -3011,6 +3340,109 @@ export interface operations {
             };
         };
     };
+    review_batch_api_t__tenant_slug__review_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchReviewIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchReviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_decisions_api_t__tenant_slug__systems__system_slug__decisions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionGroup"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fill_decision_api_t__tenant_slug__systems__system_slug__decisions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionFillIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionFillOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     inbox_api_t__tenant_slug__inbox_get: {
         parameters: {
             query?: never;
@@ -3672,7 +4104,7 @@ export interface operations {
             };
         };
     };
-    write_plan_api_t__tenant_slug__systems__system_slug__plans__plan_id__write_post: {
+    edit_plan_api_t__tenant_slug__systems__system_slug__plans__plan_id__put: {
         parameters: {
             query?: never;
             header?: never;
@@ -3685,7 +4117,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PlanWriteIn"];
+                "application/json": components["schemas"]["PlanEditIn"];
             };
         };
         responses: {
@@ -3728,6 +4160,75 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_plan_api_t__tenant_slug__systems__system_slug__plans__plan_id__write_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                plan_id: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanWriteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_coverage_api_t__tenant_slug__systems__system_slug__coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverageOut"];
+                };
             };
             /** @description Validation Error */
             422: {

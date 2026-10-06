@@ -27,6 +27,8 @@ export const keys = {
   revisionRequirements: (tenant: string, revisionId: string) =>
     ["t", tenant, "docs", "revision-requirements", revisionId] as const,
   documents: (tenant: string, system: string) => ["t", tenant, "docs", "list", system] as const,
+  decisions: (tenant: string, system: string) => ["t", tenant, "docs", "decisions", system] as const,
+  coverage: (tenant: string, system: string) => ["t", tenant, "docs", "coverage", system] as const,
   docsAll: (tenant: string) => ["t", tenant, "docs"] as const,
   document: (tenant: string, id: string) => ["t", tenant, "docs", "detail", id] as const,
   revisions: (tenant: string, id: string) => ["t", tenant, "docs", "revisions", id] as const,
@@ -132,6 +134,30 @@ export function useDocuments(tenant: string, system: string | undefined) {
       unwrap(
         api.GET("/api/t/{tenant_slug}/systems/{system_slug}/documents", {
           params: { path: { tenant_slug: tenant, system_slug: system! } },
+        }),
+      ),
+  });
+}
+
+export function useCoverage(tenant: string, system: string) {
+  return useQuery({
+    queryKey: keys.coverage(tenant, system),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/t/{tenant_slug}/systems/{system_slug}/coverage", {
+          params: { path: { tenant_slug: tenant, system_slug: system } },
+        }),
+      ),
+  });
+}
+
+export function useDecisions(tenant: string, system: string) {
+  return useQuery({
+    queryKey: keys.decisions(tenant, system),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/t/{tenant_slug}/systems/{system_slug}/decisions", {
+          params: { path: { tenant_slug: tenant, system_slug: system } },
         }),
       ),
   });

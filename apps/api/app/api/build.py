@@ -25,7 +25,9 @@ from app.schemas import (
     BasisItem,
     BasisOut,
     BasisRequirementOut,
+    CoverageOut,
     ExclusionIn,
+    PlanEditIn,
     PlanNodeOut,
     PlanOut,
     PlanStartIn,
@@ -35,6 +37,7 @@ from app.schemas import (
     UserRef,
 )
 from app.services import basis as basis_svc
+from app.services import coverage as coverage_svc
 from app.services import documents as doc_svc
 from app.services import plans as plan_svc
 
@@ -224,6 +227,8 @@ def _plan_out(ctx: TenantContext, system: ProcessSystem, plan: GenerationPlan) -
         pending = any(n.status != "done" for n in nodes)
         if plan.status in ("proposed", "partial") and pending and not plan.uncovered:
             actions.append("write")
+        if plan.status == "proposed":
+            actions.append("edit")
         if plan.status in ("proposed", "failed") or (
             plan.status == "partial" and not any(n.status == "done" for n in nodes)
         ):
@@ -281,6 +286,23 @@ def start_plan(
     return _plan_out(ctx, system, plan)
 
 
+@router.put(f"{_SYSTEM}/plans/{{plan_id}}", response_model=PlanOut)
+def edit_plan(
+    system_slug: str,
+    plan_id: uuid.UUID,
+    payload: PlanEditIn,
+    ctx: TenantContext = Depends(tenant_context),
+) -> PlanOut:
+    """사람이 고친 설계안으로 바꾼다. 문서를 생성하기 전에만 할 수 있다."""
+    system = ctx.system_by_slug(system_slug)
+    ctx.require("plan.manage", system.id)
+    plan = _plan_for(ctx, system, plan_id)
+    plan_svc.edit(
+        ctx.db, system=system, plan=plan, structure=payload.model_dump(), actor_id=ctx.user.id
+    )
+    return _plan_out(ctx, system, plan)
+
+
 @router.post(f"{_SYSTEM}/plans/{{plan_id}}/write", response_model=PlanOut)
 def write_plan(
     system_slug: str,
@@ -307,6 +329,17 @@ def discard_plan(
     plan_svc.discard(
         ctx.db, system=system, plan=_plan_for(ctx, system, plan_id), actor_id=ctx.user.id
     )
+
+
+# ── 표준 커버리지 ────────────────────────────────────────────────────────────
+
+
+@router.get(f"{_SYSTEM}/coverage", response_model=CoverageOut)
+def get_coverage(system_slug: str, ctx: TenantContext = Depends(tenant_context)) -> CoverageOut:
+    """이 체계가 근거로 삼은 표준의 요건이 어느 문서에서 이행되는지."""
+    system = ctx.system_by_slug(system_slug)
+    ctx.require("doc.read", system.id)
+    return coverage_svc.system_coverage(ctx.db, system)
 
 
 # ── 문서의 근거 ──────────────────────────────────────────────────────────────

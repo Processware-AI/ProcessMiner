@@ -1,6 +1,15 @@
 "use client";
 
-import { ChevronRightIcon, FileTextIcon, PlusIcon, SearchIcon, SparklesIcon } from "lucide-react";
+import {
+  ChevronRightIcon,
+  FileTextIcon,
+  ListChecksIcon,
+  PencilLineIcon,
+  PlusIcon,
+  SearchIcon,
+  SendIcon,
+  SparklesIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -14,6 +23,7 @@ import {
   StatusBadge,
   TypeBadge,
 } from "@/components/bits";
+import { BatchReviewDialog } from "@/components/docs/batch-review";
 import { NewDocumentDialog, type NewDocumentParent } from "@/components/docs/new-document-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,14 +73,27 @@ export default function LibraryPage() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["value"]>("all");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [dialog, setDialog] = useState<{ parent?: NewDocumentParent } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const canCreate = systemQuery.data?.actions.includes("doc.create") ?? false;
+  const canSubmit = systemQuery.data?.actions.includes("doc.submit") ?? false;
   const parentTypes = useMemo(
     () => new Set((docTypes.data ?? []).map((t) => t.parent_type).filter(Boolean)),
     [docTypes.data],
   );
 
   const all = useMemo(() => documents.data ?? [], [documents.data]);
+  // 초안을 기준으로 만들려면: 조직이 정할 항목을 채우고 → 검토를 요청한다.
+  const drafts = useMemo(() => {
+    const list = all.filter((doc) => doc.open_status === "draft");
+    const undecided = list.filter((doc) => doc.open_decisions > 0);
+    return {
+      count: list.length,
+      undecidedDocuments: undecided.length,
+      undecidedPlaces: undecided.reduce((sum, doc) => sum + doc.open_decisions, 0),
+      ready: list.filter((doc) => doc.open_decisions === 0).map((doc) => doc.open_revision_id!),
+    };
+  }, [all]);
   const needle = query.trim().toLowerCase();
   const filtering = needle !== "" || filter !== "all";
   const rows = useMemo<Row[]>(() => {
@@ -114,6 +137,10 @@ export default function LibraryPage() {
         description={systemQuery.data?.description || undefined}
         actions={
           <>
+            <LinkButton variant="outline" href={routes.coverage(tenant, system)}>
+              <ListChecksIcon />
+              표준 커버리지
+            </LinkButton>
             <LinkButton variant="outline" href={routes.build(tenant, system)}>
               <SparklesIcon />
               표준에서 만들기
@@ -160,6 +187,29 @@ export default function LibraryPage() {
           {documents.data && `${rows.length}건${filtering ? ` / 전체 ${all.length}건` : ""}`}
         </span>
       </div>
+
+      {drafts.count > 1 && (drafts.undecidedPlaces > 0 || (canSubmit && drafts.ready.length > 0)) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-amber-500/30 bg-amber-500/8 px-4 py-3">
+          <p className="min-w-0 flex-1 basis-64 text-sm text-pretty">
+            초안 {drafts.count}건
+            {drafts.undecidedPlaces > 0
+              ? ` 가운데 ${drafts.undecidedDocuments}건에 조직이 정할 항목이 ${drafts.undecidedPlaces}곳 남아 있습니다. 항목을 채워야 검토를 요청할 수 있습니다.`
+              : "이 검토 요청을 기다리고 있습니다."}
+          </p>
+          {drafts.undecidedPlaces > 0 && (
+            <LinkButton variant="outline" size="sm" href={routes.decisions(tenant, system)}>
+              <PencilLineIcon />
+              정할 항목 채우기
+            </LinkButton>
+          )}
+          {canSubmit && drafts.ready.length > 0 && (
+            <Button size="sm" onClick={() => setSubmitting(true)}>
+              <SendIcon />
+              {drafts.ready.length}건 검토 요청
+            </Button>
+          )}
+        </div>
+      )}
 
       {documents.isPending && (
         <div className="space-y-2">
@@ -232,6 +282,11 @@ export default function LibraryPage() {
                   {doc.approved_version && (
                     <StatusBadge status="approved" version={doc.approved_version} />
                   )}
+                  {doc.open_decisions > 0 && (
+                    <span className="text-xs whitespace-nowrap text-amber-700 dark:text-amber-300">
+                      정할 항목 {doc.open_decisions}
+                    </span>
+                  )}
                   {doc.open_status && (
                     <StatusBadge status={doc.open_status} version={doc.open_version} />
                   )}
@@ -263,6 +318,21 @@ export default function LibraryPage() {
           ))}
         </ul>
       )}
+
+      <BatchReviewDialog
+        tenant={tenant}
+        action="submit"
+        revisionIds={drafts.ready}
+        open={submitting}
+        onOpenChange={setSubmitting}
+        description={
+          <>
+            정할 항목이 남지 않은 초안을 한 번에 검토 요청합니다. 검토자의 받은 일에 올라가고,
+            회수하기 전에는 내용을 고칠 수 없습니다. 필수 섹션이 빈 문서는 제외되고 사유가
+            표시됩니다.
+          </>
+        }
+      />
 
       <NewDocumentDialog
         tenant={tenant}

@@ -16,6 +16,7 @@ import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "re
 import { toast } from "sonner";
 
 import { EmptyState, ErrorState, Field, LinkButton, NativeSelect, TypeBadge } from "@/components/bits";
+import { PlanEditorDialog } from "@/components/plans/plan-editor";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -644,6 +645,7 @@ function PlanCard({
   const multi = plan.sources.length > 1;
   const shared = plan.nodes.filter((n) => Object.keys(n.by_standard).length > 1);
   const [comparing, setComparing] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   return (
     <div className="rounded-xl border border-border bg-card">
@@ -671,6 +673,11 @@ function PlanCard({
             </p>
           )}
         </div>
+        {plan.actions.includes("edit") && (
+          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+            설계안 고치기
+          </Button>
+        )}
         {plan.actions.includes("discard") && (
           <Button variant="ghost" size="sm" disabled={discard.isPending} onClick={() => discard.mutate()}>
             설계안 버리기
@@ -719,8 +726,8 @@ function PlanCard({
         <Note tone="warn">
           어느 문서에도 배정되지 않은 적용요건이 {plan.uncovered.length}건 있습니다(
           {plan.uncovered.slice(0, 8).join(", ")}
-          {plan.uncovered.length > 8 && " …"}). 모든 요건이 배정돼야 문서를 생성할 수 있으니 설계안을
-          버리고 다시 설계하세요.
+          {plan.uncovered.length > 8 && " …"}). 모든 요건이 배정돼야 문서를 생성할 수 있습니다.
+          “설계안 고치기”에서 문서에 배정하거나, 설계안을 버리고 다시 설계하세요.
         </Note>
       )}
       {!busy && failed > 0 && (
@@ -731,7 +738,8 @@ function PlanCard({
       )}
       {plan.status === "proposed" && plan.uncovered.length === 0 && !busy && (
         <Note tone="info">
-          설계안을 확인하세요. 문서 생성은 문서 한 건마다 모델을 호출하므로 {plan.nodes.length}건이면
+          설계안을 확인하고, 맞지 않는 곳은 “설계안 고치기”로 바로잡으세요. 문서 생성을
+          시작한 뒤에는 고칠 수 없습니다. 문서 생성은 문서 한 건마다 모델을 호출하므로 {plan.nodes.length}건이면
           10~20분 걸립니다. 정책 하나씩 나눠서 생성할 수도 있습니다.
         </Note>
       )}
@@ -763,6 +771,15 @@ function PlanCard({
           onWrite={() => write.mutate([policy.path])}
         />
       ))}
+
+      <PlanEditorDialog
+        tenant={tenant}
+        system={system}
+        plan={plan}
+        open={editing}
+        onOpenChange={setEditing}
+        onSaved={onChanged}
+      />
 
       <Dialog open={comparing} onOpenChange={setComparing}>
         <DialogContent className="sm:max-w-4xl">

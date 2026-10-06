@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,12 @@ from app.domain import revisions as rev
 from app.domain.doc_types import allowed_child_types
 from app.models import AppUser, DocTypeDef, Document, DocumentRevision, ProcessSystem
 from app.schemas import (
+    BatchItemResult,
+    BatchReviewIn,
+    BatchReviewOut,
+    DecisionFillIn,
+    DecisionFillOut,
+    DecisionGroup,
     DocTypeOut,
     DocumentDetail,
     DocumentIn,
@@ -26,6 +32,7 @@ from app.schemas import (
     SectionSpec,
     SystemOut,
 )
+from app.services import decisions as decision_svc
 from app.services import documents as svc
 
 router = APIRouter(prefix="/api", tags=["documents"], route_class=CommitRoute)
@@ -235,6 +242,97 @@ def withdraw_revision(
     if revision.author_id != ctx.user.id:
         ctx.require("doc.edit", doc.system_id)
     return svc.to_out(ctx.db, svc.withdraw(ctx.db, revision=revision, actor_id=ctx.user.id))
+
+
+# ── 여러 건을 한 번에 ────────────────────────────────────────────────────────
+
+
+@router.post("/t/{tenant_slug}/review-batch", response_model=BatchReviewOut)
+def review_batch(
+    payload: BatchReviewIn, ctx: TenantContext = Depends(tenant_context)
+) -> BatchReviewOut:
+    """여러 개정판을 한 번에 검토 요청하거나 승인한다.
+
+    규칙은 한 건씩 할 때와 같고(권한, 작성자·검토자 분리, 상위 문서 먼저) 건마다 따로 판단한다.
+    안 되는 건은 사유와 함께 돌려주고 나머지는 처리한다.
+    """
+    db = ctx.db
+    ids = list(dict.fromkeys(payload.revision_ids))
+    rows = db.execute(
+        select(DocumentRevision, Document)
+        .join(Document, Document.id == DocumentRevision.document_id)
+        .where(DocumentRevision.id.in_(ids))
+    ).all()
+    found = {revision.id for revision, _ in rows}
+    results = [
+        BatchItemResult(revision_id=i, document=None, ok=False, error="개정판을 찾을 수 없습니다.")
+        for i in ids
+        if i not in found
+    ]
+    permission = "doc.submit" if payload.action == "submit" else "doc.review"
+    # 상위 문서부터 처리한다. 상위가 승인돼야 하위를 승인할 수 있다.
+    for revision, doc in sorted(rows, key=lambda row: (row[1].code.count("-"), row[1].code)):
+        ref = DocumentRef(id=doc.id, code=doc.code, title=doc.title, doc_type=doc.doc_type)
+        error = ""
+        if not ctx.can(permission, doc.system_id):
+            error = "이 문서를 처리할 권한이 없습니다."
+        else:
+            try:
+                with db.begin_nested():
+                    if payload.action == "submit":
+                        svc.submit(db, revision=revision, actor_id=ctx.user.id)
+                    else:
+                        svc.approve(
+                            db,
+                            revision=revision,
+                            actor_id=ctx.user.id,
+                            comment=payload.comment,
+                            tenant=ctx.tenant,
+                        )
+            except HTTPException as exc:
+                detail = exc.detail
+                error = detail.get("message", "") if isinstance(detail, dict) else str(detail)
+                db.refresh(revision)
+        results.append(
+            BatchItemResult(revision_id=revision.id, document=ref, ok=not error, error=error)
+        )
+    done = sum(result.ok for result in results)
+    return BatchReviewOut(done=done, failed=len(results) - done, results=results)
+
+
+# ── 조직이 정해야 하는 항목 ──────────────────────────────────────────────────
+
+
+@router.get("/t/{tenant_slug}/systems/{system_slug}/decisions", response_model=list[DecisionGroup])
+def list_decisions(
+    system_slug: str, ctx: TenantContext = Depends(tenant_context)
+) -> list[DecisionGroup]:
+    """이 체계의 초안에 남아 있는 〔조직 결정: …〕 항목."""
+    system = ctx.system_by_slug(system_slug)
+    ctx.require("doc.read", system.id)
+    return decision_svc.list_groups(ctx.db, system.id)
+
+
+@router.post("/t/{tenant_slug}/systems/{system_slug}/decisions", response_model=DecisionFillOut)
+def fill_decision(
+    system_slug: str, payload: DecisionFillIn, ctx: TenantContext = Depends(tenant_context)
+) -> DecisionFillOut:
+    system = ctx.system_by_slug(system_slug)
+    ctx.require("doc.edit", system.id)
+    targets = (
+        {(t.revision_id, t.section_key) for t in payload.targets}
+        if payload.targets is not None
+        else None
+    )
+    places, documents = decision_svc.fill(
+        ctx.db,
+        system=system,
+        label=payload.label,
+        value=payload.value,
+        targets=targets,
+        actor_id=ctx.user.id,
+    )
+    return DecisionFillOut(places=places, documents=documents)
 
 
 # ── 받은 일 ──────────────────────────────────────────────────────────────────

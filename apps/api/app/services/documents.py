@@ -76,6 +76,10 @@ def _summary(
         approved_at=approved.approved_at if approved else None,
         open_status=opened.status if opened else None,
         open_version=opened.version if opened else None,
+        open_revision_id=opened.id if opened else None,
+        open_decisions=(
+            len(rev.open_decisions(opened.sections)) if opened and opened.status == rev.DRAFT else 0
+        ),
         updated_at=latest,
     )
 
@@ -470,6 +474,15 @@ def submit(db: Session, *, revision: DocumentRevision, actor_id: uuid.UUID) -> D
             "missing_sections",
             f"필수 섹션이 비어 있습니다: {', '.join(missing)}",
             sections=missing,
+        )
+    pending = list(dict.fromkeys(rev.open_decisions(revision.sections)))
+    if pending:
+        names = ", ".join(pending[:3]) + (" 등" if len(pending) > 3 else "")
+        raise api_error(
+            422,
+            "open_decisions",
+            f"조직이 정해야 할 항목이 남아 있습니다({names}). 채운 뒤 검토를 요청하세요.",
+            decisions=pending,
         )
     revision.status = new_status
     revision.submitted_at = datetime.now(UTC)

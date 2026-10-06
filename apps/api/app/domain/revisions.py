@@ -7,6 +7,8 @@
 
 import hashlib
 import json
+import re
+from dataclasses import dataclass
 from typing import Any
 
 from .doc_ids import increment_version
@@ -57,6 +59,60 @@ def content_hash(title: str, sections: list[dict[str, Any]], structured: dict[st
         separators=(",", ":"),
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+# 조직이 스스로 정해야 하는 곳의 표시: 〔조직 결정: 검토 주기〕
+_DECISION = re.compile(r"〔조직 결정:\s*([^〕\n]*?)\s*〕")
+_CONTEXT = 140  # 앞뒤로 보여줄 글자 수
+
+
+@dataclass
+class OpenDecision:
+    label: str
+    before: str  # 같은 줄에서 표시 앞의 글
+    after: str  # 같은 줄에서 표시 뒤의 글
+
+
+def find_decisions(body: str) -> list[OpenDecision]:
+    """본문에 남아 있는 조직 결정 항목. 어떤 문맥인지 알 수 있게 같은 줄의 앞뒤를 함께 준다."""
+    found = []
+    for match in _DECISION.finditer(body):
+        line_start = body.rfind("\n", 0, match.start()) + 1
+        line_end = body.find("\n", match.end())
+        line_end = len(body) if line_end == -1 else line_end
+        before = body[line_start : match.start()]
+        after = body[match.end() : line_end]
+        found.append(
+            OpenDecision(
+                label=match.group(1),
+                before=("…" + before[-_CONTEXT:]) if len(before) > _CONTEXT else before,
+                after=(after[:_CONTEXT] + "…") if len(after) > _CONTEXT else after,
+            )
+        )
+    return found
+
+
+def open_decisions(sections: list[dict[str, Any]]) -> list[str]:
+    """개정판에 남아 있는 조직 결정 항목의 이름(나오는 순서대로, 중복 포함)."""
+    return [
+        decision.label
+        for section in sections
+        for decision in find_decisions(section.get("body_md") or "")
+    ]
+
+
+def fill_decision(body: str, label: str, value: str) -> tuple[str, int]:
+    """이름이 label 인 항목을 value 로 바꾼다. (바뀐 본문, 바뀐 곳 수)"""
+    count = 0
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal count
+        if match.group(1) != label:
+            return match.group(0)
+        count += 1
+        return value
+
+    return _DECISION.sub(replace, body), count
 
 
 def missing_required_sections(

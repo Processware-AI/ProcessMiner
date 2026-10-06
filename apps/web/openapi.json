@@ -1750,6 +1750,174 @@
         }
       }
     },
+    "/api/t/{tenant_slug}/review-batch": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Review Batch",
+        "description": "여러 개정판을 한 번에 검토 요청하거나 승인한다.\n\n규칙은 한 건씩 할 때와 같고(권한, 작성자·검토자 분리, 상위 문서 먼저) 건마다 따로 판단한다.\n안 되는 건은 사유와 함께 돌려주고 나머지는 처리한다.",
+        "operationId": "review_batch_api_t__tenant_slug__review_batch_post",
+        "parameters": [
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchReviewIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchReviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/systems/{system_slug}/decisions": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "List Decisions",
+        "description": "이 체계의 초안에 남아 있는 〔조직 결정: …〕 항목.",
+        "operationId": "list_decisions_api_t__tenant_slug__systems__system_slug__decisions_get",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DecisionGroup"
+                  },
+                  "title": "Response List Decisions Api T  Tenant Slug  Systems  System Slug  Decisions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Fill Decision",
+        "operationId": "fill_decision_api_t__tenant_slug__systems__system_slug__decisions_post",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionFillIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionFillOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/t/{tenant_slug}/inbox": {
       "get": {
         "tags": [
@@ -2878,6 +3046,130 @@
         }
       }
     },
+    "/api/t/{tenant_slug}/systems/{system_slug}/plans/{plan_id}": {
+      "put": {
+        "tags": [
+          "build"
+        ],
+        "summary": "Edit Plan",
+        "description": "사람이 고친 설계안으로 바꾼다. 문서를 생성하기 전에만 할 수 있다.",
+        "operationId": "edit_plan_api_t__tenant_slug__systems__system_slug__plans__plan_id__put",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Plan Id"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanEditIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "build"
+        ],
+        "summary": "Discard Plan",
+        "operationId": "discard_plan_api_t__tenant_slug__systems__system_slug__plans__plan_id__delete",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Plan Id"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/t/{tenant_slug}/systems/{system_slug}/plans/{plan_id}/write": {
       "post": {
         "tags": [
@@ -2950,13 +3242,14 @@
         }
       }
     },
-    "/api/t/{tenant_slug}/systems/{system_slug}/plans/{plan_id}": {
-      "delete": {
+    "/api/t/{tenant_slug}/systems/{system_slug}/coverage": {
+      "get": {
         "tags": [
           "build"
         ],
-        "summary": "Discard Plan",
-        "operationId": "discard_plan_api_t__tenant_slug__systems__system_slug__plans__plan_id__delete",
+        "summary": "Get Coverage",
+        "description": "이 체계가 근거로 삼은 표준의 요건이 어느 문서에서 이행되는지.",
+        "operationId": "get_coverage_api_t__tenant_slug__systems__system_slug__coverage_get",
         "parameters": [
           {
             "name": "system_slug",
@@ -2965,16 +3258,6 @@
             "schema": {
               "type": "string",
               "title": "System Slug"
-            }
-          },
-          {
-            "name": "plan_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Plan Id"
             }
           },
           {
@@ -2988,8 +3271,15 @@
           }
         ],
         "responses": {
-          "204": {
-            "description": "Successful Response"
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageOut"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -3380,6 +3670,101 @@
         ],
         "title": "BasisRequirementOut"
       },
+      "BatchItemResult": {
+        "properties": {
+          "revision_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Revision Id"
+          },
+          "document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision_id",
+          "document",
+          "ok"
+        ],
+        "title": "BatchItemResult"
+      },
+      "BatchReviewIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "submit",
+              "approve"
+            ],
+            "title": "Action"
+          },
+          "revision_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Revision Ids"
+          },
+          "comment": {
+            "type": "string",
+            "title": "Comment",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "action",
+          "revision_ids"
+        ],
+        "title": "BatchReviewIn",
+        "description": "여러 개정판을 한 번에 검토 요청하거나 승인한다."
+      },
+      "BatchReviewOut": {
+        "properties": {
+          "done": {
+            "type": "integer",
+            "title": "Done"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/BatchItemResult"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "type": "object",
+        "required": [
+          "done",
+          "failed",
+          "results"
+        ],
+        "title": "BatchReviewOut"
+      },
       "Body_upload_source_api_t__tenant_slug__sources_post": {
         "properties": {
           "file": {
@@ -3576,6 +3961,349 @@
           "unverified_count"
         ],
         "title": "ClauseSummary"
+      },
+      "CoverageChapter": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "title"
+        ],
+        "title": "CoverageChapter"
+      },
+      "CoverageDocument": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "doc_type": {
+            "type": "string",
+            "title": "Doc Type"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "in_review",
+              "draft"
+            ],
+            "title": "State"
+          },
+          "sections": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sections"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "title",
+          "doc_type",
+          "state",
+          "sections"
+        ],
+        "title": "CoverageDocument",
+        "description": "요건을 인용한 문서. 승인판과 진행 중인 판이 함께 있으면 승인판 기준이다."
+      },
+      "CoverageOut": {
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageSource"
+            },
+            "type": "array",
+            "title": "Sources"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sources"
+        ],
+        "title": "CoverageOut"
+      },
+      "CoverageRequirement": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "clause_number": {
+            "type": "string",
+            "title": "Clause Number"
+          },
+          "chapter": {
+            "type": "string",
+            "title": "Chapter"
+          },
+          "obligation": {
+            "type": "string",
+            "title": "Obligation"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "covered",
+              "drafted",
+              "gap",
+              "excluded"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageDocument"
+            },
+            "type": "array",
+            "title": "Documents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "clause_number",
+          "chapter",
+          "obligation",
+          "summary",
+          "status",
+          "reason",
+          "documents"
+        ],
+        "title": "CoverageRequirement"
+      },
+      "CoverageSource": {
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/SourceRef"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "excluded": {
+            "type": "integer",
+            "title": "Excluded"
+          },
+          "covered": {
+            "type": "integer",
+            "title": "Covered"
+          },
+          "drafted": {
+            "type": "integer",
+            "title": "Drafted"
+          },
+          "gaps": {
+            "type": "integer",
+            "title": "Gaps"
+          },
+          "chapters": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageChapter"
+            },
+            "type": "array",
+            "title": "Chapters"
+          },
+          "requirements": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageRequirement"
+            },
+            "type": "array",
+            "title": "Requirements"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "approved_at",
+          "total",
+          "excluded",
+          "covered",
+          "drafted",
+          "gaps",
+          "chapters",
+          "requirements"
+        ],
+        "title": "CoverageSource"
+      },
+      "DecisionFillIn": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Label"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Value"
+          },
+          "targets": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DecisionTarget"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Targets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "value"
+        ],
+        "title": "DecisionFillIn"
+      },
+      "DecisionFillOut": {
+        "properties": {
+          "places": {
+            "type": "integer",
+            "title": "Places"
+          },
+          "documents": {
+            "type": "integer",
+            "title": "Documents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "places",
+          "documents"
+        ],
+        "title": "DecisionFillOut"
+      },
+      "DecisionGroup": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "occurrences": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionOccurrence"
+            },
+            "type": "array",
+            "title": "Occurrences"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "occurrences"
+        ],
+        "title": "DecisionGroup",
+        "description": "같은 이름의 조직 결정 항목. 여러 문서에 걸쳐 있을 수 있다."
+      },
+      "DecisionOccurrence": {
+        "properties": {
+          "revision_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Revision Id"
+          },
+          "document": {
+            "$ref": "#/components/schemas/DocumentRef"
+          },
+          "section_key": {
+            "type": "string",
+            "title": "Section Key"
+          },
+          "section_title": {
+            "type": "string",
+            "title": "Section Title"
+          },
+          "before": {
+            "type": "string",
+            "title": "Before"
+          },
+          "after": {
+            "type": "string",
+            "title": "After"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision_id",
+          "document",
+          "section_key",
+          "section_title",
+          "before",
+          "after"
+        ],
+        "title": "DecisionOccurrence"
+      },
+      "DecisionTarget": {
+        "properties": {
+          "revision_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Revision Id"
+          },
+          "section_key": {
+            "type": "string",
+            "title": "Section Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision_id",
+          "section_key"
+        ],
+        "title": "DecisionTarget"
       },
       "DocTypeOut": {
         "properties": {
@@ -3846,6 +4574,22 @@
             ],
             "title": "Open Version"
           },
+          "open_revision_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Open Revision Id"
+          },
+          "open_decisions": {
+            "type": "integer",
+            "title": "Open Decisions"
+          },
           "updated_at": {
             "type": "string",
             "format": "date-time",
@@ -3865,6 +4609,8 @@
           "approved_at",
           "open_status",
           "open_version",
+          "open_revision_id",
+          "open_decisions",
           "updated_at"
         ],
         "title": "DocumentSummary"
@@ -4212,6 +4958,70 @@
         "type": "object",
         "title": "OrgUnitPatch"
       },
+      "PlanEditIn": {
+        "properties": {
+          "policies": {
+            "items": {
+              "$ref": "#/components/schemas/PlanPolicyIn"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Policies"
+          }
+        },
+        "type": "object",
+        "required": [
+          "policies"
+        ],
+        "title": "PlanEditIn",
+        "description": "사람이 고친 설계안 전체. 문서를 생성하기 전에만 바꿀 수 있다."
+      },
+      "PlanInstructionIn": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Purpose",
+            "default": ""
+          },
+          "requirements": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Requirements",
+            "default": []
+          },
+          "integration_note": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Integration Note",
+            "default": ""
+          },
+          "templates": {
+            "items": {
+              "type": "string",
+              "maxLength": 200,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Templates",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "PlanInstructionIn"
+      },
       "PlanNodeOut": {
         "properties": {
           "path": {
@@ -4409,6 +5219,86 @@
           "actions"
         ],
         "title": "PlanOut"
+      },
+      "PlanPolicyIn": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Purpose",
+            "default": ""
+          },
+          "requirements": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Requirements",
+            "default": []
+          },
+          "procedures": {
+            "items": {
+              "$ref": "#/components/schemas/PlanProcedureIn"
+            },
+            "type": "array",
+            "title": "Procedures",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "PlanPolicyIn"
+      },
+      "PlanProcedureIn": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "purpose": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Purpose",
+            "default": ""
+          },
+          "requirements": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Requirements",
+            "default": []
+          },
+          "integration_note": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Integration Note",
+            "default": ""
+          },
+          "instructions": {
+            "items": {
+              "$ref": "#/components/schemas/PlanInstructionIn"
+            },
+            "type": "array",
+            "title": "Instructions",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "PlanProcedureIn"
       },
       "PlanStartIn": {
         "properties": {

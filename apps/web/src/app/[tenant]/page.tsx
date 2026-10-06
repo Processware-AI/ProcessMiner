@@ -3,6 +3,7 @@
 import { CheckCircle2Icon, ChevronRightIcon, LibraryIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
 
 import {
   DocCode,
@@ -13,7 +14,9 @@ import {
   StatusBadge,
   TypeBadge,
 } from "@/components/bits";
+import { BatchReviewDialog } from "@/components/docs/batch-review";
 import { systemTree } from "@/components/shell/app-shell";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { InboxItem } from "@/lib/api";
 import { formatRelative } from "@/lib/labels";
@@ -36,6 +39,20 @@ export default function HomePage() {
   const systems = useSystems(tenant);
 
   const items = inbox.data ?? [];
+  // 검토 요청은 골라서 한 번에 승인할 수 있다. 목록이 바뀌어 사라진 것은 선택에서 뺀다.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [approving, setApproving] = useState(false);
+  const reviewable = items.filter((item) => item.kind === "to_review").map((i) => i.revision.id);
+  const selected = reviewable.filter((id) => picked.has(id));
+  const allPicked = reviewable.length > 0 && selected.length === reviewable.length;
+
+  function togglePick(id: string) {
+    setPicked((previous) => {
+      const next = new Set(previous);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
 
   return (
     <div className="space-y-8">
@@ -61,18 +78,48 @@ export default function HomePage() {
         {GROUPS.map((group) => {
           const rows = items.filter((item) => item.kind === group.kind);
           if (rows.length === 0) return null;
+          const pickable = group.kind === "to_review";
           return (
             <div key={group.kind}>
-              <div className="mb-2 flex items-baseline gap-2">
+              <div className="mb-2 flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
                 <h2 className="text-sm font-semibold">{group.title}</h2>
                 <span className="text-sm text-muted-foreground">{rows.length}</span>
                 <span className="hidden text-xs text-muted-foreground sm:inline">
                   · {group.hint}
                 </span>
+                {pickable && rows.length > 1 && (
+                  <span className="ml-auto flex items-center gap-3">
+                    <label className="flex cursor-pointer items-center gap-1.5 text-sm text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-primary"
+                        checked={allPicked}
+                        onChange={() => setPicked(allPicked ? new Set() : new Set(reviewable))}
+                      />
+                      모두 선택
+                    </label>
+                    <Button
+                      size="sm"
+                      disabled={selected.length === 0}
+                      onClick={() => setApproving(true)}
+                    >
+                      {selected.length > 0 ? `선택한 ${selected.length}건 승인` : "선택한 문서 승인"}
+                    </Button>
+                  </span>
+                )}
               </div>
               <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
                 {rows.map((item) => (
-                  <li key={item.revision.id}>
+                  <li key={item.revision.id} className="flex items-center">
+                    {pickable && rows.length > 1 && (
+                      <input
+                        type="checkbox"
+                        className="ml-3 size-4 shrink-0 accent-primary sm:ml-4"
+                        checked={picked.has(item.revision.id)}
+                        onChange={() => togglePick(item.revision.id)}
+                        aria-label={`${item.revision.title} 선택`}
+                      />
+                    )}
                     <InboxRow tenant={tenant} item={item} />
                   </li>
                 ))}
@@ -81,6 +128,22 @@ export default function HomePage() {
           );
         })}
       </section>
+
+      <BatchReviewDialog
+        tenant={tenant}
+        action="approve"
+        revisionIds={selected}
+        open={approving}
+        onOpenChange={setApproving}
+        description={
+          <>
+            선택한 개정판을 한 번에 승인합니다. 승인하면 조직의 기준이 되고, 문서마다 검토자로
+            기록됩니다. 내용을 확인한 문서만 선택하세요. 상위 문서가 승인되지 않은 문서는 제외되고
+            사유가 표시됩니다.
+          </>
+        }
+        onDone={() => setPicked(new Set())}
+      />
 
       <section>
         <h2 className="mb-2 text-sm font-semibold">체계</h2>
@@ -127,7 +190,7 @@ function InboxRow({ tenant, item }: { tenant: string; item: InboxItem }) {
   return (
     <Link
       href={routes.document(tenant, item.system_slug, document.id)}
-      className="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/50 sm:px-4"
+      className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/50 sm:px-4"
     >
       <TypeBadge type={document.doc_type} />
       <span className="min-w-0 flex-1">

@@ -251,6 +251,20 @@ function DocumentScreen({
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <div className="min-w-0 space-y-3">
           {view === "open" && open && <RevisionNotice revision={open} />}
+          {view === "open" && open?.status === "draft" && detail.document.open_decisions > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-xl border border-amber-500/30 bg-amber-500/8 px-4 py-2.5 text-sm">
+              <span className="min-w-0 flex-1 basis-60 text-pretty">
+                조직이 정할 항목이 {detail.document.open_decisions}곳 남아 있습니다. 본문의
+                〔조직 결정: …〕 을 채워야 검토를 요청할 수 있습니다.
+              </span>
+              <Link
+                href={routes.decisions(tenant, system, detail.document.code)}
+                className="font-medium underline-offset-4 hover:underline"
+              >
+                모아서 채우기
+              </Link>
+            </div>
+          )}
           {typeof view === "object" && (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/50 px-4 py-2.5 text-sm">
               <span>

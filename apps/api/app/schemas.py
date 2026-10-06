@@ -1,9 +1,16 @@
 import re
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    StringConstraints,
+    field_validator,
+)
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}$")
 
@@ -260,6 +267,9 @@ class DocumentSummary(BaseModel):
     approved_at: datetime | None
     open_status: str | None  # 진행 중인 개정판의 상태
     open_version: str | None
+    open_revision_id: uuid.UUID | None
+    # 초안에 남아 있는 〔조직 결정: …〕 항목 수. 0 이어야 검토를 요청할 수 있다.
+    open_decisions: int
     updated_at: datetime
 
 
@@ -301,6 +311,60 @@ class RevisionPatch(BaseModel):
 
 class ReviewIn(BaseModel):
     comment: str = ""
+
+
+class BatchReviewIn(BaseModel):
+    """여러 개정판을 한 번에 검토 요청하거나 승인한다."""
+
+    action: Literal["submit", "approve"]
+    revision_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
+    comment: str = ""
+
+
+class BatchItemResult(BaseModel):
+    revision_id: uuid.UUID
+    document: DocumentRef | None
+    ok: bool
+    error: str = ""
+
+
+class BatchReviewOut(BaseModel):
+    done: int
+    failed: int
+    results: list[BatchItemResult]
+
+
+class DecisionOccurrence(BaseModel):
+    revision_id: uuid.UUID
+    document: DocumentRef
+    section_key: str
+    section_title: str
+    before: str  # 같은 줄에서 항목 앞의 글
+    after: str
+
+
+class DecisionGroup(BaseModel):
+    """같은 이름의 조직 결정 항목. 여러 문서에 걸쳐 있을 수 있다."""
+
+    label: str
+    occurrences: list[DecisionOccurrence]
+
+
+class DecisionTarget(BaseModel):
+    revision_id: uuid.UUID
+    section_key: str
+
+
+class DecisionFillIn(BaseModel):
+    label: str = Field(max_length=500)
+    value: str = Field(min_length=1, max_length=2000)
+    # 채울 곳. 비우면 이 체계의 초안 전체에서 같은 이름의 항목을 모두 채운다.
+    targets: list[DecisionTarget] | None = None
+
+
+class DecisionFillOut(BaseModel):
+    places: int
+    documents: int
 
 
 class InboxItem(BaseModel):
@@ -443,6 +507,39 @@ class PlanStartIn(BaseModel):
     scope_code: str = Field(pattern=r"^[A-Z]{2,8}$")
 
 
+_PlanTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+_PlanText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)]
+
+
+class PlanInstructionIn(BaseModel):
+    title: _PlanTitle
+    purpose: _PlanText = ""
+    requirements: list[str] = []
+    integration_note: _PlanText = ""
+    templates: list[_PlanTitle] = Field(default=[], max_length=3)
+
+
+class PlanProcedureIn(BaseModel):
+    title: _PlanTitle
+    purpose: _PlanText = ""
+    requirements: list[str] = []
+    integration_note: _PlanText = ""
+    instructions: list[PlanInstructionIn] = []
+
+
+class PlanPolicyIn(BaseModel):
+    title: _PlanTitle
+    purpose: _PlanText = ""
+    requirements: list[str] = []
+    procedures: list[PlanProcedureIn] = []
+
+
+class PlanEditIn(BaseModel):
+    """사람이 고친 설계안 전체. 문서를 생성하기 전에만 바꿀 수 있다."""
+
+    policies: list[PlanPolicyIn] = Field(min_length=1)
+
+
 class PlanWriteIn(BaseModel):
     # 문서를 생성할 정책의 경로(p0, p1 …). 비우면 남은 문서를 모두 생성한다.
     policies: list[str] | None = None
@@ -476,13 +573,61 @@ class PlanOut(BaseModel):
     created_at: datetime
     accepted_at: datetime | None
     run: RunOut | None
-    actions: list[str]  # write | discard
+    actions: list[str]  # write | edit | discard
 
 
 class RevisionRequirementOut(BaseModel):
     section_key: str
     requirement: RequirementOut
     source: SourceRef
+
+
+# ── 표준 커버리지 ────────────────────────────────────────────────────────────
+
+
+class CoverageDocument(BaseModel):
+    """요건을 인용한 문서. 승인판과 진행 중인 판이 함께 있으면 승인판 기준이다."""
+
+    id: uuid.UUID
+    code: str
+    title: str
+    doc_type: str
+    state: Literal["approved", "in_review", "draft"]
+    sections: list[str]  # 인용한 섹션의 제목
+
+
+class CoverageRequirement(BaseModel):
+    id: uuid.UUID
+    code: str
+    clause_number: str
+    chapter: str  # 속한 장. "5" 또는 부속서의 "F"
+    obligation: str
+    summary: str
+    # covered: 승인된 문서가 이행 | drafted: 승인 전 문서만 | gap: 문서 없음 | excluded: 적용 제외
+    status: Literal["covered", "drafted", "gap", "excluded"]
+    reason: str  # 제외 사유
+    documents: list[CoverageDocument]
+
+
+class CoverageChapter(BaseModel):
+    key: str
+    title: str
+
+
+class CoverageSource(BaseModel):
+    source: SourceRef
+    approved_at: datetime | None  # 적용요건을 승인한 때. 승인 전이면 요건이 바뀔 수 있다.
+    total: int  # 확정된 요건 수
+    excluded: int
+    covered: int
+    drafted: int
+    gaps: int
+    chapters: list[CoverageChapter]
+    requirements: list[CoverageRequirement]
+
+
+class CoverageOut(BaseModel):
+    sources: list[CoverageSource]
 
 
 # ── 감사 기록 ────────────────────────────────────────────────────────────────

@@ -21,7 +21,7 @@ from app.models import (
 )
 from app.pipelines import planning
 from app.services import audit
-from app.services.basis import sources_in_live_plans
+from app.services.basis import applicable_requirements, sources_in_live_plans
 
 ACTIVE_RUN_STATUSES = ("queued", "running")
 
@@ -150,6 +150,53 @@ def start_design(
     return plan
 
 
+def applicable_codes(db: Session, plan: GenerationPlan) -> set[str]:
+    """이 설계안이 배정해야 하는 요건의 코드("원문약칭 번호")."""
+    return {
+        planning.qualified_code(source.code, requirement.code)
+        for source in plan_sources(db, plan.id)
+        for requirement, _ in applicable_requirements(db, plan.system_id, source.id)
+    }
+
+
+def edit(
+    db: Session,
+    *,
+    system: ProcessSystem,
+    plan: GenerationPlan,
+    structure: dict,
+    actor_id: uuid.UUID,
+) -> GenerationPlan:
+    """사람이 설계안을 고친다(문서 이름, 구성, 요건 배정). 문서를 생성하기 전에만 할 수 있다.
+
+    모델이 낸 설계안과 같은 규칙으로 정리한다: 없는 코드와 중복 배정은 지우고,
+    어느 문서에도 배정되지 않은 요건을 다시 센다. 배정되지 않은 요건이 남으면 문서를 생성할 수 없다.
+    """
+    if plan.status != "proposed":
+        raise api_error(409, "invalid_status", "문서 생성을 시작한 설계안은 고칠 수 없습니다.")
+    if has_active_run(db, plan.id):
+        raise api_error(409, "run_in_progress", "작업이 끝난 뒤에 고칠 수 있습니다.")
+
+    cleaned, uncovered = planning.normalize(structure, applicable_codes(db, plan))
+    plan.structure = cleaned
+    plan.uncovered = uncovered
+    db.flush()
+    audit.record(
+        db,
+        tenant_id=system.tenant_id,
+        actor_id=actor_id,
+        action="plan.edit",
+        entity_type="plan",
+        entity_id=plan.id,
+        data={
+            "system": system.slug,
+            "documents": len(planning.flatten(cleaned)),
+            "uncovered": len(uncovered),
+        },
+    )
+    return plan
+
+
 def pending_paths(plan: GenerationPlan, under: list[str] | None = None) -> list[str]:
     """아직 만들어지지 않은 문서의 경로. under 가 있으면 그 정책들 아래만."""
     done = {path for path, result in plan.results.items() if result.get("status") == "done"}
@@ -181,7 +228,7 @@ def start_writing(
             409,
             "uncovered_requirements",
             f"어느 문서에도 배정되지 않은 적용요건이 {len(plan.uncovered)}건 있습니다. "
-            "다시 설계하세요.",
+            "설계안을 고쳐 배정하거나 다시 설계하세요.",
         )
     top_level = {n.path for n in planning.flatten(plan.structure) if n.doc_type == "POL"}
     if policies is not None and not set(policies) <= top_level:

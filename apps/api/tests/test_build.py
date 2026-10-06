@@ -241,6 +241,15 @@ def test_basis_must_be_confirmed_reviewed_and_approved(consultant, fake_pdf, mon
 
     approved = consultant.post(f"{system}/basis/{source_id}/approve").json()["items"][0]
     assert approved["excluded"] == 1 and approved["approved_by"]["name"] == "컨설턴트"
+    # 아직 문서가 없으니 적용요건은 모두 미이행이고, 제외한 요건은 사유와 함께 따로 센다.
+    coverage = consultant.get(f"{system}/coverage").json()["sources"][0]
+    assert (coverage["total"], coverage["excluded"], coverage["gaps"]) == (3, 1, 2)
+    assert [(r["code"], r["status"], r["reason"]) for r in coverage["requirements"]] == [
+        ("2.1.1-01", "gap", ""),
+        ("2.1.2-01", "gap", ""),
+        ("2.2-01", "excluded", "검증은 외부 위탁"),
+    ]
+    assert coverage["chapters"] == [{"key": "2", "title": "Requirements"}]
     assert set(approved["actions"]) == {"reopen", "design"}
     # 승인한 뒤에는 적용요건을 바꿀 수 없다. 바꾸려면 승인을 취소한다.
     assert (
@@ -272,7 +281,7 @@ def test_design_then_write_documents_with_citations(consultant, fake_pdf, monkey
         ("WI", "개발 계획 수립 지침", "pending"),
         ("TMP", "개발 계획서", "pending"),
     ]
-    assert plan["actions"] == ["write", "discard"]
+    assert plan["actions"] == ["write", "edit", "discard"]
     # 설계안이 있는 동안에는 적용요건 승인을 취소할 수 없다.
     response = consultant.post(f"{system}/basis/{source_id}/reopen")
     assert response.json()["detail"]["code"] == "plan_exists"
@@ -309,6 +318,38 @@ def test_design_then_write_documents_with_citations(consultant, fake_pdf, monkey
     steps = [link for link in links if link["section_key"] == "steps"]
     assert [link["requirement"]["code"] for link in steps] == ["2.1.1-01", "2.1.2-01"]
     assert steps[0]["requirement"]["quote_verified"] and steps[0]["source"]["code"] == "IEC99999"
+
+    # 커버리지: 초안만 있는 동안은 '초안', 승인된 문서가 인용하면 '이행'이 된다.
+    coverage = consultant.get(f"{system}/coverage").json()["sources"][0]
+    assert (coverage["covered"], coverage["drafted"], coverage["gaps"]) == (0, 3, 0)
+    cited = {r["code"]: {d["code"]: d for d in r["documents"]} for r in coverage["requirements"]}
+    # 지침에 배정된 요건은 지침과, 그 요건을 근거로 댄 정책·템플릿에서 이행된다.
+    assert set(cited["2.1.1-01"]) == {"POL-QMS-01", "WI-QMS-01-01-01", "TMP-QMS-01-01-01-01"}
+    assert set(cited["2.2-01"]) == {"POL-QMS-01", "PRO-QMS-01-01"}
+    assert cited["2.1.1-01"]["WI-QMS-01-01-01"]["state"] == "draft"
+    assert "수행 단계" in cited["2.1.1-01"]["WI-QMS-01-01-01"]["sections"]
+
+    reviewer = add_member(consultant, tenant, "품질 책임자", ["qmr"])
+    pol = next(n for n in done["nodes"] if n["doc_type"] == "POL")
+    pol_revision = consultant.get(f"/api/t/{tenant}/documents/{pol['document_id']}").json()["open"]
+    assert (
+        consultant.post(f"/api/t/{tenant}/revisions/{pol_revision['id']}/submit").status_code == 200
+    )
+    approve = f"/api/t/{tenant}/revisions/{pol_revision['id']}/approve"
+    assert reviewer.post(approve, json={}).status_code == 200
+    coverage = reviewer.get(f"{system}/coverage").json()["sources"][0]
+    # 정책이 세 요건을 모두 인용하므로 모두 '이행'이 된다. 문서별 상태는 따로 보인다.
+    assert (coverage["covered"], coverage["drafted"], coverage["gaps"]) == (3, 0, 0)
+    states = {d["code"]: d["state"] for d in coverage["requirements"][0]["documents"]}
+    assert states == {
+        "POL-QMS-01": "approved",
+        "WI-QMS-01-01-01": "draft",
+        "TMP-QMS-01-01-01-01": "draft",
+    }
+
+    # 문서 생성을 시작한 설계안은 고칠 수 없다.
+    late = consultant.put(f"{system}/plans/{plan['id']}", json=_structure())
+    assert late.status_code == 409 and late.json()["detail"]["code"] == "invalid_status"
 
     # 같은 원문으로 다시 생성할 수 없다(문서가 중복된다).
     again = consultant.post(
@@ -436,9 +477,36 @@ def test_uncovered_requirements_block_writing(consultant, fake_pdf, monkeypatch)
     ).json()["id"]
     worker.process_next_run()
     plan = consultant.get(f"{system}/plans").json()[0]
-    assert plan["uncovered"] == [CODES[2]] and plan["actions"] == ["discard"]
+    assert plan["uncovered"] == [CODES[2]] and plan["actions"] == ["edit", "discard"]
     response = consultant.post(f"{system}/plans/{plan_id}/write", json={})
     assert response.json()["detail"]["code"] == "uncovered_requirements"
+
+    # 사람이 설계안을 고쳐 빠진 요건을 배정할 수 있다. 이름과 구성도 바꿀 수 있다.
+    edited = _structure(procedure_codes=())
+    edited["policies"][0]["title"] = "  소프트웨어 개발 정책  "
+    procedure = edited["policies"][0]["procedures"][0]
+    procedure["requirements"] = [CODES[2], "IEC99999 9.9-99"]  # 없는 코드는 버려진다
+    procedure["instructions"].append(
+        {"title": "개발 계획 검증 지침", "purpose": "", "requirements": [], "templates": []}
+    )
+    plan = consultant.put(f"{system}/plans/{plan_id}", json=edited).json()
+    assert plan["uncovered"] == [] and plan["actions"] == ["write", "edit", "discard"]
+    assert [(n["doc_type"], n["title"]) for n in plan["nodes"]] == [
+        ("POL", "소프트웨어 개발 정책"),
+        ("PRO", "개발 계획 절차"),
+        ("WI", "개발 계획 수립 지침"),
+        ("TMP", "개발 계획서"),
+        ("WI", "개발 계획 검증 지침"),
+    ]
+    assert plan["nodes"][1]["requirements"] == [CODES[2]]
+    # 제목이 비었거나 정책이 하나도 없는 설계안은 받지 않는다.
+    blank = _structure()
+    blank["policies"][0]["procedures"][0]["title"] = "  "
+    assert consultant.put(f"{system}/plans/{plan_id}", json=blank).status_code == 422
+    assert consultant.put(f"{system}/plans/{plan_id}", json={"policies": []}).status_code == 422
+    # 요건을 빼면 다시 미배정이 된다.
+    plan = consultant.put(f"{system}/plans/{plan_id}", json=_structure(procedure_codes=())).json()
+    assert plan["uncovered"] == [CODES[2]]
 
     # 버리고 다시 설계할 수 있다.
     assert consultant.delete(f"{system}/plans/{plan_id}").status_code == 204
