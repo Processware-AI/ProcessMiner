@@ -349,10 +349,74 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Document */
+        /**
+         * Get Document
+         * @description 문서 한 건. system 을 주면 그 체계에서 보는 모습(상속·재정의·제외)으로 돌려준다.
+         */
         get: operations["get_document_api_t__tenant_slug__documents__document_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/systems/{system_slug}/tailoring/{document_id}/override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Override Document
+         * @description 상위 체계에서 물려받은 문서를 이 체계의 문서로 재정의한다.
+         */
+        post: operations["override_document_api_t__tenant_slug__systems__system_slug__tailoring__document_id__override_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/systems/{system_slug}/tailoring/{document_id}/exclusion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Exclude Document
+         * @description 상위 체계에서 물려받은 문서를 이 체계에 적용하지 않는다.
+         */
+        put: operations["exclude_document_api_t__tenant_slug__systems__system_slug__tailoring__document_id__exclusion_put"];
+        post?: never;
+        /** Include Document */
+        delete: operations["include_document_api_t__tenant_slug__systems__system_slug__tailoring__document_id__exclusion_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/documents/{document_id}/ack-base": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acknowledge Base Change
+         * @description 재정의한 문서에서, 상위 문서의 변경을 확인했음을 남긴다.
+         */
+        post: operations["acknowledge_base_change_api_t__tenant_slug__documents__document_id__ack_base_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1277,6 +1341,7 @@ export interface components {
         /** DocumentDetail */
         DocumentDetail: {
             document: components["schemas"]["DocumentSummary"];
+            tailoring: components["schemas"]["TailoringInfo"];
             system: components["schemas"]["SystemOut"];
             /** Ancestors */
             ancestors: components["schemas"]["DocumentRef"][];
@@ -1351,6 +1416,39 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Tailoring
+             * @default own
+             * @enum {string}
+             */
+            tailoring: "own" | "inherited" | "override" | "added" | "excluded";
+            /**
+             * Tailoring Reason
+             * @default
+             */
+            tailoring_reason: string;
+            /**
+             * Tailoring Implied
+             * @default false
+             */
+            tailoring_implied: boolean;
+            /**
+             * Home System Slug
+             * @default
+             */
+            home_system_slug: string;
+            /**
+             * Home System Name
+             * @default
+             */
+            home_system_name: string;
+            /** Base Document Id */
+            base_document_id?: string | null;
+            /**
+             * Base Changed
+             * @default false
+             */
+            base_changed: boolean;
         };
         /** ExclusionIn */
         ExclusionIn: {
@@ -1807,6 +1905,16 @@ export interface components {
             /** Change Summary */
             change_summary?: string | null;
         };
+        /** RevisionRef */
+        RevisionRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version */
+            version: string;
+        };
         /** RevisionRequirementOut */
         RevisionRequirementOut: {
             /** Section Key */
@@ -2065,6 +2173,46 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** SystemRef */
+        SystemRef: {
+            /** Slug */
+            slug: string;
+            /** Name */
+            name: string;
+        };
+        /** TailoringIn */
+        TailoringIn: {
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
+        /**
+         * TailoringInfo
+         * @description 보고 있는 체계에서 이 문서의 테일러링 상태와, 요청자가 할 수 있는 일.
+         */
+        TailoringInfo: {
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "own" | "inherited" | "override" | "added" | "excluded";
+            view_system: components["schemas"]["SystemRef"];
+            home_system: components["schemas"]["SystemRef"];
+            /** Reason */
+            reason: string;
+            /** Implied */
+            implied: boolean;
+            base: components["schemas"]["DocumentRef"] | null;
+            base_system: components["schemas"]["SystemRef"] | null;
+            base_forked: components["schemas"]["RevisionRef"] | null;
+            base_current: components["schemas"]["RevisionRef"] | null;
+            /** Base Changed */
+            base_changed: boolean;
+            /** Actions */
+            actions: string[];
         };
         /** TenantIn */
         TenantIn: {
@@ -3003,6 +3151,143 @@ export interface operations {
         };
     };
     get_document_api_t__tenant_slug__documents__document_id__get: {
+        parameters: {
+            query?: {
+                system?: string | null;
+            };
+            header?: never;
+            path: {
+                document_id: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    override_document_api_t__tenant_slug__systems__system_slug__tailoring__document_id__override_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                document_id: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TailoringIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exclude_document_api_t__tenant_slug__systems__system_slug__tailoring__document_id__exclusion_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                document_id: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TailoringIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    include_document_api_t__tenant_slug__systems__system_slug__tailoring__document_id__exclusion_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                document_id: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_base_change_api_t__tenant_slug__documents__document_id__ack_base_post: {
         parameters: {
             query?: never;
             header?: never;

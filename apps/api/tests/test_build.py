@@ -347,6 +347,19 @@ def test_design_then_write_documents_with_citations(consultant, fake_pdf, monkey
         "TMP-QMS-01-01-01-01": "draft",
     }
 
+    # 하위 체계는 근거와 문서를 물려받는다. 문서를 제외하면 그 문서는 이행 문서에서 빠진다.
+    baseline_id = consultant.get(system).json()["id"]
+    new_system(consultant, tenant, slug="dev", parent_id=baseline_id)
+    child = f"/api/t/{tenant}/systems/dev"
+    inherited = consultant.get(f"{child}/coverage").json()["sources"][0]
+    assert inherited["source"]["code"] == "IEC99999"
+    assert (inherited["covered"], inherited["drafted"], inherited["gaps"]) == (3, 0, 0)
+    exclusion = f"{child}/tailoring/{wi['document_id']}/exclusion"
+    assert consultant.put(exclusion, json={"reason": "개발은 외주로 한다"}).status_code == 204
+    tailored = consultant.get(f"{child}/coverage").json()["sources"][0]
+    # 지침과 그 아래 양식이 빠져, 그 요건은 정책에서만 이행된다.
+    assert [d["code"] for d in tailored["requirements"][0]["documents"]] == ["POL-QMS-01"]
+
     # 문서 생성을 시작한 설계안은 고칠 수 없다.
     late = consultant.put(f"{system}/plans/{plan['id']}", json=_structure())
     assert late.status_code == 409 and late.json()["detail"]["code"] == "invalid_status"

@@ -22,9 +22,11 @@ SYSTEM_ROLES = ("process_owner", "executor", "auditor", "qmr", "admin", "viewer"
 
 # 체계 범위 역할별 허용 행위
 # basis.*: 체계의 근거(적용요건)를 고르고 승인한다. plan.manage: 요건에서 문서를 생성한다.
+# doc.tailor: 상위 체계에서 물려받은 문서를 재정의하거나 제외한다.
 _OWNER_ACTIONS = frozenset(
     {
         "doc.create",
+        "doc.tailor",
         "doc.edit",
         "doc.submit",
         "doc.review",

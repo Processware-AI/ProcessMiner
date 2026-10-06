@@ -28,12 +28,17 @@ from app.schemas import (
     RevisionMeta,
     RevisionOut,
     RevisionPatch,
+    RevisionRef,
     RevisionStartIn,
     SectionSpec,
     SystemOut,
+    SystemRef,
+    TailoringIn,
+    TailoringInfo,
 )
 from app.services import decisions as decision_svc
 from app.services import documents as svc
+from app.services import tailoring
 
 router = APIRouter(prefix="/api", tags=["documents"], route_class=CommitRoute)
 
@@ -66,7 +71,7 @@ def list_documents(
 ) -> list[DocumentSummary]:
     system = ctx.system_by_slug(system_slug)
     ctx.require("doc.read", system.id)
-    return svc.list_documents(ctx.db, system.id)
+    return svc.list_documents(ctx.db, system)
 
 
 @router.post(
@@ -85,26 +90,142 @@ def create_document(
 
 @router.get("/t/{tenant_slug}/documents/{document_id}", response_model=DocumentDetail)
 def get_document(
-    document_id: uuid.UUID, ctx: TenantContext = Depends(tenant_context)
+    document_id: uuid.UUID,
+    system: str | None = None,
+    ctx: TenantContext = Depends(tenant_context),
 ) -> DocumentDetail:
+    """문서 한 건. system 을 주면 그 체계에서 보는 모습(상속·재정의·제외)으로 돌려준다."""
     doc = svc.get_document(ctx.db, document_id)
     ctx.require("doc.read", doc.system_id)
+    return _detail(ctx, doc, ctx.system_by_slug(system) if system else None)
+
+
+def _ref(doc: Document) -> DocumentRef:
+    return DocumentRef(id=doc.id, code=doc.code, title=doc.title, doc_type=doc.doc_type)
+
+
+def _detail(ctx: TenantContext, doc: Document, via: ProcessSystem | None = None) -> DocumentDetail:
+    """via 는 문서를 보고 있는 체계다. 하위 체계에서 물려받은 문서를 볼 때 문서의 체계와 다르다."""
+    db = ctx.db
+    home = db.get(ProcessSystem, doc.system_id)
+    view = via or home
+    entries = {e.doc.id: e for e in tailoring.effective_documents(db, view)}
+    if doc.id not in entries:
+        # 그 체계에서 쓰이지 않는 문서(대체됐거나 상위에서 제외됨)는 문서 자신의 체계 기준으로 본다.
+        view = home
+        entries = {e.doc.id: e for e in tailoring.effective_documents(db, view)}
+    entry = entries[doc.id]
+    inherited = view.id != doc.system_id
+
+    children = [e for e in entries.values() if e.parent_id == doc.id]
+    summaries = {s.id: s for s in svc.effective_summaries(db, [entry, *children])}
+    chain, parent_id = [], entry.parent_id
+    while parent_id is not None:
+        chain.append(_ref(entries[parent_id].doc))
+        parent_id = entries[parent_id].parent_id
+
+    approved = svc.approved_revision(db, doc.id)
+    # 상위 체계에서 진행 중인 개정은 하위 체계에 보이지 않는다. 승인판만 내려온다.
+    opened = None if inherited else svc.open_revision(db, doc.id)
+    if inherited:
+        actions = (
+            [f"create_child:{t}" for t in allowed_child_types(doc.doc_type)]
+            if entry.state == "inherited" and ctx.can("doc.create", view.id)
+            else []
+        )
+    else:
+        actions = _document_actions(ctx, doc, approved, opened)
+
+    forked, current = tailoring.base_state(db, doc)
+    base_changed = current is not None and (forked is None or forked.id != current.id)
+    can_tailor = ctx.can("doc.tailor", view.id)
+    tailoring_actions: list[str] = []
+    if can_tailor and entry.state == "inherited":
+        tailoring_actions = ["override", "exclude"] if approved is not None else ["exclude"]
+    elif can_tailor and entry.state == "excluded" and not entry.implied:
+        tailoring_actions = ["include"]
+    elif can_tailor and entry.state == "override" and base_changed:
+        tailoring_actions = ["ack_base"]
+    base_home = db.get(ProcessSystem, entry.base.system_id) if entry.base is not None else None
+
+    return DocumentDetail(
+        document=summaries[doc.id],
+        tailoring=TailoringInfo(
+            state=entry.state,
+            view_system=SystemRef(slug=view.slug, name=view.name),
+            home_system=SystemRef(slug=home.slug, name=home.name),
+            reason=entry.reason,
+            implied=entry.implied,
+            base=_ref(entry.base) if entry.base is not None else None,
+            base_system=SystemRef(slug=base_home.slug, name=base_home.name) if base_home else None,
+            base_forked=RevisionRef(id=forked.id, version=forked.version) if forked else None,
+            base_current=RevisionRef(id=current.id, version=current.version) if current else None,
+            base_changed=entry.state == "override" and base_changed,
+            actions=tailoring_actions,
+        ),
+        system=SystemOut.model_validate(home),
+        ancestors=list(reversed(chain)),
+        children=sorted((summaries[c.doc.id] for c in children), key=lambda s: s.code),
+        approved=svc.to_out(db, approved),
+        open=svc.to_out(db, opened),
+        actions=actions,
+    )
+
+
+# ── 테일러링 ─────────────────────────────────────────────────────────────────
+
+_TAILORING = "/t/{tenant_slug}/systems/{system_slug}/tailoring/{document_id}"
+
+
+@router.post(f"{_TAILORING}/override", response_model=DocumentDetail, status_code=201)
+def override_document(
+    system_slug: str,
+    document_id: uuid.UUID,
+    payload: TailoringIn,
+    ctx: TenantContext = Depends(tenant_context),
+) -> DocumentDetail:
+    """상위 체계에서 물려받은 문서를 이 체계의 문서로 재정의한다."""
+    system = ctx.system_by_slug(system_slug)
+    ctx.require("doc.tailor", system.id)
+    doc = tailoring.override(
+        ctx.db, system=system, document_id=document_id, reason=payload.reason, actor_id=ctx.user.id
+    )
     return _detail(ctx, doc)
 
 
-def _detail(ctx: TenantContext, doc: Document) -> DocumentDetail:
-    db = ctx.db
-    approved = svc.approved_revision(db, doc.id)
-    opened = svc.open_revision(db, doc.id)
-    return DocumentDetail(
-        document=svc.get_summary(db, doc.id),
-        system=SystemOut.model_validate(db.get(ProcessSystem, doc.system_id)),
-        ancestors=svc.ancestors(db, doc),
-        children=svc.list_children(db, doc.id),
-        approved=svc.to_out(db, approved),
-        open=svc.to_out(db, opened),
-        actions=_document_actions(ctx, doc, approved, opened),
+@router.put(f"{_TAILORING}/exclusion", status_code=204)
+def exclude_document(
+    system_slug: str,
+    document_id: uuid.UUID,
+    payload: TailoringIn,
+    ctx: TenantContext = Depends(tenant_context),
+) -> None:
+    """상위 체계에서 물려받은 문서를 이 체계에 적용하지 않는다."""
+    system = ctx.system_by_slug(system_slug)
+    ctx.require("doc.tailor", system.id)
+    tailoring.exclude(
+        ctx.db, system=system, document_id=document_id, reason=payload.reason, actor_id=ctx.user.id
     )
+
+
+@router.delete(f"{_TAILORING}/exclusion", status_code=204)
+def include_document(
+    system_slug: str, document_id: uuid.UUID, ctx: TenantContext = Depends(tenant_context)
+) -> None:
+    system = ctx.system_by_slug(system_slug)
+    ctx.require("doc.tailor", system.id)
+    tailoring.include(ctx.db, system=system, document_id=document_id, actor_id=ctx.user.id)
+
+
+@router.post("/t/{tenant_slug}/documents/{document_id}/ack-base", response_model=DocumentDetail)
+def acknowledge_base_change(
+    document_id: uuid.UUID, ctx: TenantContext = Depends(tenant_context)
+) -> DocumentDetail:
+    """재정의한 문서에서, 상위 문서의 변경을 확인했음을 남긴다."""
+    doc = svc.get_document(ctx.db, document_id)
+    ctx.require("doc.tailor", doc.system_id)
+    tailoring.acknowledge_base(ctx.db, doc=doc, actor_id=ctx.user.id)
+    return _detail(ctx, doc)
 
 
 def _document_actions(

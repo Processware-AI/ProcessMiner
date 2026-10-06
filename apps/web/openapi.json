@@ -1194,7 +1194,266 @@
           "documents"
         ],
         "summary": "Get Document",
+        "description": "문서 한 건. system 을 주면 그 체계에서 보는 모습(상속·재정의·제외)으로 돌려준다.",
         "operationId": "get_document_api_t__tenant_slug__documents__document_id__get",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          },
+          {
+            "name": "system",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "System"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/systems/{system_slug}/tailoring/{document_id}/override": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Override Document",
+        "description": "상위 체계에서 물려받은 문서를 이 체계의 문서로 재정의한다.",
+        "operationId": "override_document_api_t__tenant_slug__systems__system_slug__tailoring__document_id__override_post",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TailoringIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/systems/{system_slug}/tailoring/{document_id}/exclusion": {
+      "put": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Exclude Document",
+        "description": "상위 체계에서 물려받은 문서를 이 체계에 적용하지 않는다.",
+        "operationId": "exclude_document_api_t__tenant_slug__systems__system_slug__tailoring__document_id__exclusion_put",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TailoringIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Include Document",
+        "operationId": "include_document_api_t__tenant_slug__systems__system_slug__tailoring__document_id__exclusion_delete",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/documents/{document_id}/ack-base": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Acknowledge Base Change",
+        "description": "재정의한 문서에서, 상위 문서의 변경을 확인했음을 남긴다.",
+        "operationId": "acknowledge_base_change_api_t__tenant_slug__documents__document_id__ack_base_post",
         "parameters": [
           {
             "name": "document_id",
@@ -4353,6 +4612,9 @@
           "document": {
             "$ref": "#/components/schemas/DocumentSummary"
           },
+          "tailoring": {
+            "$ref": "#/components/schemas/TailoringInfo"
+          },
           "system": {
             "$ref": "#/components/schemas/SystemOut"
           },
@@ -4401,6 +4663,7 @@
         "type": "object",
         "required": [
           "document",
+          "tailoring",
           "system",
           "ancestors",
           "children",
@@ -4594,6 +4857,55 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "tailoring": {
+            "type": "string",
+            "enum": [
+              "own",
+              "inherited",
+              "override",
+              "added",
+              "excluded"
+            ],
+            "title": "Tailoring",
+            "default": "own"
+          },
+          "tailoring_reason": {
+            "type": "string",
+            "title": "Tailoring Reason",
+            "default": ""
+          },
+          "tailoring_implied": {
+            "type": "boolean",
+            "title": "Tailoring Implied",
+            "default": false
+          },
+          "home_system_slug": {
+            "type": "string",
+            "title": "Home System Slug",
+            "default": ""
+          },
+          "home_system_name": {
+            "type": "string",
+            "title": "Home System Name",
+            "default": ""
+          },
+          "base_document_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Document Id"
+          },
+          "base_changed": {
+            "type": "boolean",
+            "title": "Base Changed",
+            "default": false
           }
         },
         "type": "object",
@@ -5895,6 +6207,25 @@
         "type": "object",
         "title": "RevisionPatch"
       },
+      "RevisionRef": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "version"
+        ],
+        "title": "RevisionRef"
+      },
       "RevisionRequirementOut": {
         "properties": {
           "section_key": {
@@ -6504,6 +6835,132 @@
           "created_at"
         ],
         "title": "SystemOut"
+      },
+      "SystemRef": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "name"
+        ],
+        "title": "SystemRef"
+      },
+      "TailoringIn": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "TailoringIn"
+      },
+      "TailoringInfo": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "own",
+              "inherited",
+              "override",
+              "added",
+              "excluded"
+            ],
+            "title": "State"
+          },
+          "view_system": {
+            "$ref": "#/components/schemas/SystemRef"
+          },
+          "home_system": {
+            "$ref": "#/components/schemas/SystemRef"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "implied": {
+            "type": "boolean",
+            "title": "Implied"
+          },
+          "base": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "base_system": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SystemRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "base_forked": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevisionRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "base_current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevisionRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "base_changed": {
+            "type": "boolean",
+            "title": "Base Changed"
+          },
+          "actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Actions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "view_system",
+          "home_system",
+          "reason",
+          "implied",
+          "base",
+          "base_system",
+          "base_forked",
+          "base_current",
+          "base_changed",
+          "actions"
+        ],
+        "title": "TailoringInfo",
+        "description": "보고 있는 체계에서 이 문서의 테일러링 상태와, 요청자가 할 수 있는 일."
       },
       "TenantIn": {
         "properties": {

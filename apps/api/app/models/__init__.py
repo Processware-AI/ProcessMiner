@@ -1,6 +1,12 @@
 from .audit import AuditLog
 from .base import Base
-from .documents import DocSequence, Document, DocumentLink, DocumentRevision
+from .documents import (
+    DocSequence,
+    Document,
+    DocumentExclusion,
+    DocumentLink,
+    DocumentRevision,
+)
 from .generation import (
     DocumentRequirement,
     GenerationPlan,
@@ -29,6 +35,7 @@ TENANT_TABLES = [
     "document",
     "document_revision",
     "document_link",
+    "document_exclusion",
     "doc_sequence",
     "audit_log",
     "source_document",
@@ -53,6 +60,7 @@ __all__ = [
     "DocSequence",
     "DocTypeDef",
     "Document",
+    "DocumentExclusion",
     "DocumentLink",
     "DocumentRequirement",
     "DocumentRevision",

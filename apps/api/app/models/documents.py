@@ -25,7 +25,16 @@ class Document(Base):
     """문서의 정체성. 내용은 DocumentRevision 에 있다."""
 
     __tablename__ = "document"
-    __table_args__ = (UniqueConstraint("system_id", "code"),)
+    __table_args__ = (
+        UniqueConstraint("system_id", "code"),
+        Index(
+            "uq_document_override",
+            "system_id",
+            "overrides_id",
+            unique=True,
+            postgresql_where=text("overrides_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     tenant_id: Mapped[uuid.UUID] = tenant_fk()
@@ -45,7 +54,37 @@ class Document(Base):
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("document.id", ondelete="RESTRICT"), index=True
     )
+    # 테일러링: 하위 체계가 상위 체계의 문서를 대체(재정의)한 문서일 때만 채운다.
+    overrides_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("document.id", ondelete="RESTRICT")
+    )
+    # 재정의가 기준으로 삼은 상위 문서의 판. 상위 문서의 승인판이 이것과 달라지면 '상위 변경됨'.
+    base_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("document_revision.id", ondelete="SET NULL")
+    )
+    tailoring_reason: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = created_at()
+
+
+class DocumentExclusion(Base):
+    """하위 체계가 적용하지 않기로 한 상위 문서. 사유가 있어야 한다."""
+
+    __tablename__ = "document_exclusion"
+
+    system_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("process_system.id", ondelete="CASCADE"), primary_key=True
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("document.id", ondelete="CASCADE"), primary_key=True
+    )
+    tenant_id: Mapped[uuid.UUID] = tenant_fk()
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    excluded_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="SET NULL")
     )
     created_at: Mapped[datetime] = created_at()

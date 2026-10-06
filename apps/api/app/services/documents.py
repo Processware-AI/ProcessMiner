@@ -34,7 +34,7 @@ from app.schemas import (
     Section,
     UserRef,
 )
-from app.services import audit
+from app.services import audit, tailoring
 from app.services.numbering import allocate_code
 
 # ── 조회 ─────────────────────────────────────────────────────────────────────
@@ -84,8 +84,54 @@ def _summary(
     )
 
 
-def list_documents(db: Session, system_id: uuid.UUID) -> list[DocumentSummary]:
-    return _summaries(db, Document.system_id == system_id)
+def effective_summaries(db: Session, entries: list[tailoring.Effective]) -> list[DocumentSummary]:
+    """실효 문서(tailoring.effective_documents 의 결과)를 목록에 보여줄 모양으로 만든다."""
+    if not entries:
+        return []
+    rows = {s.id: s for s in _summaries(db, Document.id.in_([e.doc.id for e in entries]))}
+    # 재정의한 문서: 그 뒤로 상위 문서가 개정됐는지 본다.
+    bases = [e.base.id for e in entries if e.base is not None]
+    current_base = (
+        dict(
+            db.execute(
+                select(DocumentRevision.document_id, DocumentRevision.id).where(
+                    DocumentRevision.document_id.in_(bases),
+                    DocumentRevision.status == rev.APPROVED,
+                )
+            ).all()
+        )
+        if bases
+        else {}
+    )
+    result = []
+    for entry in entries:
+        update: dict[str, Any] = {
+            "parent_id": entry.parent_id,
+            "tailoring": entry.state,
+            "tailoring_reason": entry.reason,
+            "tailoring_implied": entry.implied,
+            "home_system_slug": entry.home.slug,
+            "home_system_name": entry.home.name,
+        }
+        if entry.base is not None:
+            current = current_base.get(entry.base.id)
+            update["base_document_id"] = entry.base.id
+            update["base_changed"] = current is not None and current != entry.doc.base_revision_id
+        if entry.state in ("inherited", "excluded"):
+            # 상위 체계에서 진행 중인 개정은 이 체계의 일이 아니다. 승인판만 내려온다.
+            update |= {
+                "open_status": None,
+                "open_version": None,
+                "open_revision_id": None,
+                "open_decisions": 0,
+            }
+        result.append(rows[entry.doc.id].model_copy(update=update))
+    return result
+
+
+def list_documents(db: Session, system: ProcessSystem) -> list[DocumentSummary]:
+    """이 체계에서 쓰이는 문서: 자기 문서와, 상위 체계에서 물려받은 문서."""
+    return effective_summaries(db, tailoring.effective_documents(db, system))
 
 
 def list_children(db: Session, document_id: uuid.UUID) -> list[DocumentSummary]:
@@ -239,7 +285,12 @@ def create_document(
                 f"{doc_type} 문서는 상위 {expected_parent} 문서가 필요합니다.",
             )
         parent = db.get(Document, payload.parent_id)
-        if parent is None or parent.system_id != system.id:
+        if parent is not None and parent.system_id != system.id:
+            # 하위 체계는 물려받은 문서 아래에도 문서를 추가할 수 있다.
+            inherited = tailoring.find(db, system, parent.id)
+            if inherited is None or inherited.state == "excluded":
+                parent = None
+        if parent is None:
             raise api_error(422, "parent_not_found", "상위 문서를 이 체계에서 찾을 수 없습니다.")
         if parent.doc_type != expected_parent:
             raise api_error(

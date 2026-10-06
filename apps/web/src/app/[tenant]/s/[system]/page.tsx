@@ -25,13 +25,14 @@ import {
 } from "@/components/bits";
 import { BatchReviewDialog } from "@/components/docs/batch-review";
 import { NewDocumentDialog, type NewDocumentParent } from "@/components/docs/new-document-dialog";
+import { TAILORING_LABEL, TAILORING_STYLE } from "@/components/docs/tailoring-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DocumentSummary } from "@/lib/api";
 import { formatRelative } from "@/lib/labels";
-import { useDocTypes, useDocuments, useSystem } from "@/lib/queries";
+import { useDocTypes, useDocuments, useSystem, useSystems } from "@/lib/queries";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
@@ -60,12 +61,15 @@ const FILTERS = [
   { value: "all", label: "전체" },
   { value: "open", label: "진행 중" },
   { value: "approved", label: "승인됨" },
+  // 하위 체계에서만: 상위 체계와 다르게 한 문서(재정의·제외·추가)
+  { value: "tailored", label: "바꾼 문서" },
 ] as const;
 
 /** 자산 라이브러리: 한 체계의 문서를 계층으로 본다. */
 export default function LibraryPage() {
   const { tenant, system } = useParams<{ tenant: string; system: string }>();
   const systemQuery = useSystem(tenant, system);
+  const systems = useSystems(tenant);
   const documents = useDocuments(tenant, system);
   const docTypes = useDocTypes();
 
@@ -77,6 +81,7 @@ export default function LibraryPage() {
 
   const canCreate = systemQuery.data?.actions.includes("doc.create") ?? false;
   const canSubmit = systemQuery.data?.actions.includes("doc.submit") ?? false;
+  const parentSystem = systems.data?.find((s) => s.id === systemQuery.data?.parent_system_id);
   const parentTypes = useMemo(
     () => new Set((docTypes.data ?? []).map((t) => t.parent_type).filter(Boolean)),
     [docTypes.data],
@@ -107,11 +112,25 @@ export default function LibraryPage() {
           doc.title.toLowerCase().includes(needle);
         const matchesFilter =
           filter === "all" ||
-          (filter === "open" ? doc.open_status !== null : doc.approved_version !== null);
+          (filter === "open"
+            ? doc.open_status !== null
+            : filter === "approved"
+              ? doc.approved_version !== null && doc.tailoring !== "excluded"
+              : doc.tailoring !== "inherited" && doc.tailoring !== "own");
         return matchesText && matchesFilter;
       })
       .map((doc) => ({ doc, depth: 0, hasChildren: false }));
   }, [all, collapsed, filtering, needle, filter]);
+  const tailoring = useMemo(() => {
+    const count = (state: string) => all.filter((doc) => doc.tailoring === state).length;
+    return {
+      inherited: count("inherited"),
+      override: count("override"),
+      added: count("added"),
+      excluded: count("excluded"),
+      changed: all.filter((doc) => doc.base_changed).length,
+    };
+  }, [all]);
 
   function toggle(id: string) {
     setCollapsed((previous) => {
@@ -166,7 +185,7 @@ export default function LibraryPage() {
           />
         </div>
         <div className="flex rounded-lg bg-muted p-0.5" role="group" aria-label="상태로 걸러 보기">
-          {FILTERS.map((option) => (
+          {FILTERS.filter((option) => option.value !== "tailored" || parentSystem).map((option) => (
             <button
               key={option.value}
               type="button"
@@ -187,6 +206,24 @@ export default function LibraryPage() {
           {documents.data && `${rows.length}건${filtering ? ` / 전체 ${all.length}건` : ""}`}
         </span>
       </div>
+
+      {parentSystem && documents.data && (
+        <p className="rounded-xl border border-violet-500/25 bg-violet-500/6 px-4 py-2.5 text-sm text-pretty">
+          <Link
+            href={routes.library(tenant, parentSystem.slug)}
+            className="font-medium underline-offset-4 hover:underline"
+          >
+            {parentSystem.name}
+          </Link>
+          의 문서를 물려받습니다. 그대로 쓰는 문서 {tailoring.inherited}건 · 재정의{" "}
+          {tailoring.override}건 · 추가 {tailoring.added}건 · 제외 {tailoring.excluded}건
+          {tailoring.changed > 0 && (
+            <span className="ml-1 font-medium text-amber-700 dark:text-amber-300">
+              · 상위 문서가 바뀐 재정의 {tailoring.changed}건
+            </span>
+          )}
+        </p>
+      )}
 
       {drafts.count > 1 && (drafts.undecidedPlaces > 0 || (canSubmit && drafts.ready.length > 0)) && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-amber-500/30 bg-amber-500/8 px-4 py-3">
@@ -243,7 +280,11 @@ export default function LibraryPage() {
           {rows.map(({ doc, depth, hasChildren }) => (
             <li
               key={doc.id}
-              className="group relative flex items-center border-b border-border last:border-b-0 hover:bg-muted/40"
+              className={cn(
+                "group relative flex items-center border-b border-border last:border-b-0 hover:bg-muted/40",
+                doc.tailoring === "excluded" && "opacity-55",
+              )}
+              title={doc.tailoring === "excluded" ? `제외 사유: ${doc.tailoring_reason || "상위 문서 제외"}` : undefined}
             >
               <div
                 className="flex shrink-0 items-center"
@@ -279,7 +320,22 @@ export default function LibraryPage() {
                   <DocCode className="block truncate">{doc.code}</DocCode>
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center">
-                  {doc.approved_version && (
+                  {doc.base_changed && (
+                    <span className="inline-flex h-5 items-center rounded-md bg-amber-500/12 px-1.5 text-xs font-medium whitespace-nowrap text-amber-700 dark:text-amber-300">
+                      상위 변경됨
+                    </span>
+                  )}
+                  {doc.tailoring !== "own" && (
+                    <span
+                      className={cn(
+                        "inline-flex h-5 items-center rounded-md px-1.5 text-xs font-medium",
+                        TAILORING_STYLE[doc.tailoring],
+                      )}
+                    >
+                      {TAILORING_LABEL[doc.tailoring]}
+                    </span>
+                  )}
+                  {doc.approved_version && doc.tailoring !== "excluded" && (
                     <StatusBadge status="approved" version={doc.approved_version} />
                   )}
                   {doc.open_decisions > 0 && (
@@ -296,7 +352,7 @@ export default function LibraryPage() {
                 </span>
               </Link>
 
-              {canCreate && parentTypes.has(doc.doc_type) && (
+              {canCreate && parentTypes.has(doc.doc_type) && doc.tailoring !== "excluded" && (
                 <Tooltip>
                   <TooltipTrigger
                     render={

@@ -271,6 +271,15 @@ class DocumentSummary(BaseModel):
     # 초안에 남아 있는 〔조직 결정: …〕 항목 수. 0 이어야 검토를 요청할 수 있다.
     open_decisions: int
     updated_at: datetime
+    # 테일러링: 보고 있는 체계에서 이 문서가 어떤 상태인가.
+    # own(기준선 체계의 문서) | inherited(상위 문서를 그대로) | override(대체) | added | excluded
+    tailoring: Literal["own", "inherited", "override", "added", "excluded"] = "own"
+    tailoring_reason: str = ""
+    tailoring_implied: bool = False  # 상위 문서가 제외돼 함께 제외됨
+    home_system_slug: str = ""  # 문서가 속한 체계(상속이면 상위 체계)
+    home_system_name: str = ""
+    base_document_id: uuid.UUID | None = None  # 재정의가 대체한 상위 문서
+    base_changed: bool = False  # 재정의한 뒤 상위 문서가 개정됨
 
 
 class DocumentIn(BaseModel):
@@ -287,8 +296,39 @@ class DocumentRef(BaseModel):
     doc_type: str
 
 
+class SystemRef(BaseModel):
+    slug: str
+    name: str
+
+
+class RevisionRef(BaseModel):
+    id: uuid.UUID
+    version: str
+
+
+class TailoringInfo(BaseModel):
+    """보고 있는 체계에서 이 문서의 테일러링 상태와, 요청자가 할 수 있는 일."""
+
+    state: Literal["own", "inherited", "override", "added", "excluded"]
+    view_system: SystemRef  # 보고 있는 체계
+    home_system: SystemRef  # 문서가 속한 체계
+    reason: str
+    implied: bool
+    base: DocumentRef | None  # 재정의가 대체한 상위 문서
+    base_system: SystemRef | None
+    base_forked: RevisionRef | None  # 재정의가 기준으로 삼은 상위 판
+    base_current: RevisionRef | None  # 상위 문서의 지금 승인판
+    base_changed: bool
+    actions: list[str]  # override | exclude | include | ack_base
+
+
+class TailoringIn(BaseModel):
+    reason: str = Field(default="", max_length=2000)
+
+
 class DocumentDetail(BaseModel):
     document: DocumentSummary
+    tailoring: TailoringInfo
     system: SystemOut
     ancestors: list[DocumentRef]  # 최상위부터 바로 위 문서까지
     children: list[DocumentSummary]

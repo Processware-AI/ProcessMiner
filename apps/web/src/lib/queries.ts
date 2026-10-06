@@ -30,7 +30,9 @@ export const keys = {
   decisions: (tenant: string, system: string) => ["t", tenant, "docs", "decisions", system] as const,
   coverage: (tenant: string, system: string) => ["t", tenant, "docs", "coverage", system] as const,
   docsAll: (tenant: string) => ["t", tenant, "docs"] as const,
-  document: (tenant: string, id: string) => ["t", tenant, "docs", "detail", id] as const,
+  // 같은 문서라도 보는 체계에 따라 모습이 다르다(하위 체계에서는 상속·재정의·제외).
+  document: (tenant: string, id: string, system = "") =>
+    ["t", tenant, "docs", "detail", id, system] as const,
   revisions: (tenant: string, id: string) => ["t", tenant, "docs", "revisions", id] as const,
   revision: (tenant: string, id: string) => ["t", tenant, "docs", "revision", id] as const,
 };
@@ -163,13 +165,17 @@ export function useDecisions(tenant: string, system: string) {
   });
 }
 
-export function useDocument(tenant: string, documentId: string) {
+/** system 은 문서를 보고 있는 체계다. 하위 체계에서 물려받은 문서를 볼 때 필요하다. */
+export function useDocument(tenant: string, documentId: string, system?: string) {
   return useQuery({
-    queryKey: keys.document(tenant, documentId),
+    queryKey: keys.document(tenant, documentId, system),
     queryFn: () =>
       unwrap(
         api.GET("/api/t/{tenant_slug}/documents/{document_id}", {
-          params: { path: { tenant_slug: tenant, document_id: documentId } },
+          params: {
+            path: { tenant_slug: tenant, document_id: documentId },
+            query: system ? { system } : {},
+          },
         }),
       ),
   });

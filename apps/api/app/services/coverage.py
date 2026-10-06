@@ -29,6 +29,7 @@ from app.schemas import (
     SourceRef,
 )
 from app.services import basis as basis_svc
+from app.services import tailoring
 
 # 한 문서에 승인판과 진행 중인 판이 함께 있으면 승인판을 앞세운다.
 _STATE_ORDER = {rev.APPROVED: 0, rev.IN_REVIEW: 1, rev.DRAFT: 2}
@@ -45,6 +46,27 @@ def system_coverage(db: Session, system: ProcessSystem) -> CoverageOut:
         for row in db.scalars(select(DocTypeDef))
     }
 
+    # 이 체계에서 쓰이는 문서만 센다: 자기 문서와 물려받은 문서. 제외한 문서는 빠진다.
+    entries = [e for e in tailoring.effective_documents(db, system) if e.state != "excluded"]
+    effective = {e.doc.id for e in entries}
+    # 재정의했지만 아직 승인하지 않은 문서는, 승인할 때까지 상위 문서의 승인판이 유효하다.
+    overrides = {e.doc.id: e.base.id for e in entries if e.base is not None}
+    approved_overrides = (
+        set(
+            db.scalars(
+                select(DocumentRevision.document_id).where(
+                    DocumentRevision.document_id.in_(overrides),
+                    DocumentRevision.status == rev.APPROVED,
+                )
+            )
+        )
+        if overrides
+        else set()
+    )
+    standing_bases = {
+        base for doc_id, base in overrides.items() if doc_id not in approved_overrides
+    }
+
     # 요건 → 문서 → (판의 상태, 인용한 섹션). 대체된 옛 판은 세지 않는다.
     cited: dict = {}
     links = db.execute(
@@ -56,17 +78,30 @@ def system_coverage(db: Session, system: ProcessSystem) -> CoverageOut:
         )
         .join(DocumentRevision, DocumentRevision.id == DocumentRequirement.revision_id)
         .join(Document, Document.id == DocumentRequirement.document_id)
-        .where(Document.system_id == system.id, DocumentRevision.status.in_(_STATE_ORDER))
+        .where(
+            Document.id.in_(effective | standing_bases),
+            DocumentRevision.status.in_(_STATE_ORDER),
+        )
         .order_by(Document.code)
     )
     for requirement_id, section_key, status, doc in links:
+        if doc.id not in effective and status != rev.APPROVED:
+            continue
         by_state = cited.setdefault(requirement_id, {}).setdefault(
             doc.id, {"doc": doc, "states": {}}
         )
         by_state["states"].setdefault(status, []).append(section_key)
 
+    # 근거(적용요건)는 상위 체계의 것까지 물려받는다. 요건 제외는 근거를 정한 체계의 것을 따른다.
+    bases, seen = [], set()
+    for level in tailoring.lineage(db, system):
+        for basis, source, _total, _excluded in basis_svc.list_basis(db, level.id):
+            if source.id not in seen:
+                seen.add(source.id)
+                bases.append((level, basis, source))
+
     sources = []
-    for basis, source, _total, _excluded in basis_svc.list_basis(db, system.id):
+    for level, basis, source in bases:
         chapters = {
             _chapter_key(number): title
             for number, title in db.execute(
@@ -77,7 +112,7 @@ def system_coverage(db: Session, system: ProcessSystem) -> CoverageOut:
         }
         requirements = []
         for requirement, clause, exclusion in basis_svc.requirements_with_exclusions(
-            db, system.id, source.id
+            db, level.id, source.id
         ):
             documents = []
             for entry in cited.get(requirement.id, {}).values():

@@ -21,6 +21,7 @@ import { DocCode, ErrorState, Field, StatusBadge, TypeBadge } from "@/components
 import { NewDocumentDialog } from "@/components/docs/new-document-dialog";
 import { RevisionEditor } from "@/components/docs/revision-editor";
 import { RevisionCompare, RevisionView } from "@/components/docs/revision-view";
+import { TAILORING_LABEL, TAILORING_STYLE, TailoringPanel } from "@/components/docs/tailoring-panel";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -56,7 +57,7 @@ type View = "open" | "approved" | "compare" | { revisionId: string };
 
 export default function DocumentPage() {
   const { tenant, system, docId } = useParams<{ tenant: string; system: string; docId: string }>();
-  const detail = useDocument(tenant, docId);
+  const detail = useDocument(tenant, docId, system);
 
   if (detail.error) return <ErrorState error={detail.error} />;
   if (!detail.data) {
@@ -141,7 +142,7 @@ function DocumentScreen({
     <div className="space-y-5">
       <nav aria-label="위치" className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
         <Link href={routes.library(tenant, system)} className="hover:text-foreground">
-          {detail.system.name}
+          {detail.tailoring.view_system.name}
         </Link>
         {detail.ancestors.map((ancestor) => (
           <span key={ancestor.id} className="flex items-center gap-1">
@@ -162,6 +163,16 @@ function DocumentScreen({
           <div className="mb-1.5 flex flex-wrap items-center gap-2">
             <TypeBadge type={doc.doc_type} />
             <DocCode className="text-sm">{doc.code}</DocCode>
+            {detail.tailoring.state !== "own" && (
+              <span
+                className={cn(
+                  "inline-flex h-5 items-center rounded-md px-1.5 text-xs font-medium",
+                  TAILORING_STYLE[detail.tailoring.state],
+                )}
+              >
+                {TAILORING_LABEL[detail.tailoring.state]}
+              </span>
+            )}
             {approved && <StatusBadge status="approved" version={approved.version} />}
             {open && <StatusBadge status={open.status} version={open.version} />}
             {draftedByModel && (
@@ -250,6 +261,12 @@ function DocumentScreen({
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <div className="min-w-0 space-y-3">
+          <TailoringPanel tenant={tenant} system={system} detail={detail} current={approved ?? open} />
+          {!approved && !open && (
+            <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+              상위 체계에서 아직 승인되지 않은 문서입니다. 승인되면 내용이 여기에 나타납니다.
+            </p>
+          )}
           {view === "open" && open && <RevisionNotice revision={open} />}
           {view === "open" && open?.status === "draft" && detail.document.open_decisions > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-xl border border-amber-500/30 bg-amber-500/8 px-4 py-2.5 text-sm">
