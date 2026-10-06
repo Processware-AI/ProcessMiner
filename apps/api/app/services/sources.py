@@ -115,7 +115,7 @@ def register(
             page_start=clause.page_start,
             page_end=clause.page_end,
             position=position,
-            has_obligation=clause.kind == "clause" and has_obligation(clause),
+            has_obligation=clause.normative and has_obligation(clause),
             text=clause.text,
         )
         for position, clause in enumerate(clauses)

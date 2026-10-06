@@ -144,8 +144,13 @@ def segment_clauses(pages: list[PageText]) -> list[Clause]:
                 numbered = _NUMBERED.match(line)
                 if numbered:
                     key = _key(numbered.group(1))
+                    # 1 번 조항이 다시 나오면, 앞서 모은 것이 진짜 본문이 아니었는지 본다.
+                    # 목차였거나(조항마다 본문이 거의 없다), 서문의 각주 "1 …" 한 줄을
+                    # 1 번 조항으로 잘못 잡은 경우(뒤따르는 조항이 하나도 없다)다.
                     restart = (
-                        key == (1,) and previous_key is not None and not current_has_body(clauses)
+                        key == (1,)
+                        and previous_key is not None
+                        and (not current_has_body(clauses) or len(clauses) == 1)
                     )
                     if previous_key is None and key != (1,):
                         pass  # 첫 조항(1)이 나오기 전의 번호는 무시한다

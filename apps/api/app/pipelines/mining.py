@@ -87,10 +87,13 @@ def has_obligation(clause: Clause) -> bool:
 
 
 def build_units(clauses: list[Clause], unit_level: int = 2) -> list[MiningUnit]:
-    """규범 조항을 절 단위로 묶는다. 의무 표현이 하나도 없는 묶음은 뺀다."""
+    """규범 조항을 절 단위로 묶는다. 의무 표현이 하나도 없는 묶음은 뺀다.
+
+    본문 조항과 규범 부속서(normative annex)가 대상이다. 참고용 부속서는 요건이 아니다.
+    """
     units: dict[str, MiningUnit] = {}
     for clause in clauses:
-        if clause.kind != "clause" or not clause.normative:
+        if not clause.normative:
             continue
         parts = clause.number.split(".")
         key = ".".join(parts[:unit_level])

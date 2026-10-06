@@ -85,6 +85,36 @@ def test_units_cover_only_normative_clauses_with_obligations():
     assert [c.number for c in units[0].clauses] == ["2.1", "2.1.1", "2.1.2"]
 
 
+def test_footnote_before_the_first_clause_is_not_clause_one():
+    pages = [
+        "Introduction\nThis document builds on earlier work [1]1.\n"
+        "1 Numbers in square brackets refer to the Bibliography.\n"
+        "Security has to be considered over the whole life cycle of the product, and the "
+        "activities described here are meant to be combined with existing processes.",
+        "1 Scope\nThis document applies to the development of software.\n"
+        "2 Requirements\nThe supplier shall keep records of every security activity.",
+    ]
+    clauses = segment_clauses(
+        [PageText(page_no=i, text=t, sparse=False) for i, t in enumerate(pages, start=1)]
+    )
+    assert [(c.number, c.title, c.page_start) for c in clauses] == [
+        ("1", "Scope", 2),
+        ("2", "Requirements", 2),
+    ]
+
+
+def test_normative_annexes_are_mined_but_informative_ones_are_not():
+    pages = [
+        "1 Scope\nThis document applies to the development of software.\n"
+        "2 Requirements\nThe supplier shall keep records of every security activity.\n"
+        "Annex A\n(informative)\nRationale\nA.1 General\nThis annex shall not add anything.\n"
+        "Annex B\n(normative)\nCoding rules\nB.1 General\n"
+        "The developer shall follow the coding rules of the organization.",
+    ]
+    clauses = segment_clauses([PageText(page_no=1, text=pages[0], sparse=False)])
+    assert [u.number for u in mining.build_units(clauses)] == ["2", "B.1"]
+
+
 def test_quote_must_exist_in_the_clause():
     unit = mining.build_units(segment_clauses(_pages()))[0]
     output = MiningOutput(
@@ -142,11 +172,11 @@ def _fake_llm(monkeypatch, answers, fail_units=()):
     monkeypatch.setattr(llm, "structured", structured)
 
 
-def _upload(client, tenant, data=b"%PDF-1.7 fake"):
+def _upload(client, tenant, data=b"%PDF-1.7 fake", code="iec99999"):
     return client.post(
         f"/api/t/{tenant}/sources",
         files={"file": ("standard.pdf", data, "application/pdf")},
-        data={"title": "시험용 표준", "code": "iec99999", "edition": "2020"},
+        data={"title": "시험용 표준", "code": code, "edition": "2020"},
     )
 
 
