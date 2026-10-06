@@ -1,0 +1,23 @@
+# 표준 분류 레지스트리.
+# 원본: vault/00_공통관리/07_표준분류레지스트리.md §2.
+# layer / structure / integration_mode 의 뜻은 원본 §1 참조.
+# 표준 원문은 여기 두지 않는다(저작권). 원문은 회사별로 업로드한다.
+- {code: ISO9001, name: ISO 9001, layer: L1_management, structure: HLS, integration_mode: hls_merge, scope_codes: [QMS]}
+- {code: ISO14001, name: ISO 14001, layer: L1_management, structure: HLS, integration_mode: hls_merge, scope_codes: [EMS]}
+- {code: ISO45001, name: ISO 45001, layer: L1_management, structure: HLS, integration_mode: hls_merge, scope_codes: [OHSMS]}
+- {code: ISO27001, name: ISO/IEC 27001, layer: L1_management, structure: HLS, integration_mode: hls_merge, scope_codes: [ISMS]}
+- {code: ISO27701, name: ISO/IEC 27701, layer: L1_management, structure: HLS, integration_mode: hls_merge, scope_codes: [PIMS], notes: ISO 27001 확장}
+- {code: ISO20000, name: ISO/IEC 20000, layer: L1_management, structure: HLS, integration_mode: hls_merge, scope_codes: [ITSM]}
+- {code: ISO22301, name: ISO 22301, layer: L1_management, structure: HLS, integration_mode: hls_merge, scope_codes: [BCMS]}
+- {code: ISO42001, name: ISO/IEC 42001, layer: L1_management, structure: HLS, integration_mode: hls_merge, scope_codes: [AIMS]}
+- {code: IATF16949, name: IATF 16949, layer: L1_management, structure: HLS, integration_mode: hls_merge, scope_codes: [AUTO], notes: ISO 9001 확장(자동차)}
+- {code: ISO13485, name: ISO 13485, layer: L1_management, structure: quasi_HLS, integration_mode: quasi_hls_merge, scope_codes: [MDQMS], notes: 의료기기 QMS. 의도적 HLS 비준수}
+- {code: ISO14971, name: ISO 14971, layer: L2_engineering, structure: risk_lifecycle, integration_mode: interface_only, scope_codes: [MDRM]}
+- {code: IEC62304, name: IEC 62304, layer: L2_engineering, structure: sw_lifecycle, integration_mode: interface_only, scope_codes: [MDSW]}
+- {code: IEC81001-5-1, name: IEC 81001-5-1, layer: L2_engineering, structure: phase_lifecycle, integration_mode: interface_only, scope_codes: [MDCS]}
+- {code: ASPICE, name: Automotive SPICE, layer: L2_engineering, structure: capability_model, integration_mode: interface_only, scope_codes: [SPICE]}
+- {code: ISO26262, name: ISO 26262, layer: L2_engineering, structure: part_lifecycle, integration_mode: interface_only, scope_codes: [FUSA]}
+- {code: ISO21434, name: ISO/SAE 21434, layer: L2_engineering, structure: phase_lifecycle, integration_mode: interface_only, scope_codes: [VCSMS]}
+- {code: ISO31000, name: ISO 31000, layer: L3_reference, structure: risk_framework, integration_mode: reference_only, scope_codes: [RM]}
+- {code: ISO12207, name: ISO/IEC/IEEE 12207, layer: L2_engineering, structure: sw_lifecycle, integration_mode: interface_only, scope_codes: [SWLC]}
+- {code: ISO15288, name: ISO/IEC/IEEE 15288, layer: L2_engineering, structure: phase_lifecycle, integration_mode: interface_only, scope_codes: [SYSLC]}

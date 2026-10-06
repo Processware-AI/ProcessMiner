@@ -1,0 +1,25 @@
+# 플랫폼 공통 영역코드.
+# 원본: vault/00_공통관리/02_문서번호체계.md §영역 코드.
+# 영역코드는 업무 영역을 뜻한다. 표준 코드(ISO9001 등)와 구분한다 — 표준은 standards.yaml.
+- {code: QMS, name: 품질경영, layer: L1_management}
+- {code: ISMS, name: 정보보안, layer: L1_management}
+- {code: PIMS, name: 개인정보, layer: L1_management}
+- {code: EMS, name: 환경, layer: L1_management}
+- {code: OHSMS, name: 안전보건, layer: L1_management}
+- {code: ITSM, name: IT서비스, layer: L1_management}
+- {code: BCMS, name: 사업연속성, layer: L1_management}
+- {code: AIMS, name: AI경영, layer: L1_management}
+- {code: RM, name: 리스크, layer: L3_reference}
+- {code: SWLC, name: SW 수명주기, layer: L2_engineering}
+- {code: SYSLC, name: 시스템 수명주기, layer: L2_engineering}
+- {code: IR, name: 침해사고 대응, layer: L2_engineering}
+- {code: VUL, name: 취약점 관리, layer: L2_engineering}
+- {code: AUTO, name: 자동차 QMS, layer: L1_management}
+- {code: SPICE, name: Automotive SPICE, layer: L2_engineering}
+- {code: FUSA, name: 자동차 기능안전, layer: L2_engineering}
+- {code: VCSMS, name: 자동차 사이버보안, layer: L2_engineering}
+- {code: MDQMS, name: 의료기기 QMS, layer: L1_management}
+- {code: MDRM, name: 의료기기 리스크 관리, layer: L2_engineering}
+- {code: MDSW, name: 의료기기 SW 수명주기, layer: L2_engineering}
+- {code: MDCS, name: 의료기기 사이버보안, layer: L2_engineering}
+- {code: CMMI, name: 프로세스 성숙도, layer: L2_engineering}

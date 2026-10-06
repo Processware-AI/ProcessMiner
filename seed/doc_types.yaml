@@ -1,0 +1,193 @@
+# 문서 유형과 유형별 섹션 구성.
+# 원본: vault/00_공통관리/01_문서체계.md, vault/99_템플릿/T03~T10.
+#
+# 템플릿에 있던 섹션 중 다른 데이터에서 계산되는 것은 여기 두지 않는다.
+#   - 하위 문서 목록(연계 PRO/WI/TMP)  → 문서 계층에서 표시
+#   - 표준 매핑(Traceability)          → 요건 링크에서 표시
+#   - 개정 이력                        → 개정판 기록에서 표시
+#
+# sections[].template 은 새 초안을 만들 때 본문에 미리 채워 넣는 Markdown 이다.
+# sections[].normative 는 활동·책임·기준을 정하는 섹션이라는 표시다. 표준에서 문서를 생성할 때
+# 이 섹션에는 근거 요건이 반드시 있어야 한다.
+
+- code: POL
+  name: 정책서
+  description: 원칙·방침·책임을 정한다.
+  sort: 1
+  sections:
+    - key: purpose
+      title: 목적
+      required: true
+      hint: 이 정책이 왜 필요한지, 무엇을 보장하려는지 적는다.
+    - key: scope
+      title: 적용 범위
+      required: true
+      hint: 적용되는 조직·업무·자산과 제외 대상을 적는다.
+    - key: principles
+      normative: true
+      title: 정책 원칙
+      required: true
+      hint: 조직이 지켜야 할 원칙을 항목별로 적는다.
+    - key: roles
+      normative: true
+      title: 역할과 책임
+      required: true
+      template: |
+        | 역할 | 책임 |
+        |---|---|
+        |  |  |
+    - key: compliance
+      normative: true
+      title: 준수 기준
+      required: false
+      hint: 위반 시 조치, 예외 승인 절차, 점검 주기를 적는다.
+
+- code: PRO
+  name: 절차서
+  description: 업무 흐름과 관리 절차를 정한다.
+  parent_type: POL
+  sort: 2
+  sections:
+    - key: purpose
+      title: 목적
+      required: true
+    - key: scope
+      title: 적용 범위
+      required: true
+    - key: raci
+      normative: true
+      title: 역할과 책임 (RACI)
+      required: true
+      template: |
+        | 단계 | R | A | C | I |
+        |---|---|---|---|---|
+        |  |  |  |  |  |
+    - key: flow
+      normative: true
+      title: 절차 흐름
+      required: true
+      template: |
+        ```mermaid
+        flowchart TD
+          A[시작] --> B[단계 1] --> C[단계 2] --> D[종료]
+        ```
+
+        | # | 단계 | 설명 | 담당 | 입력 | 출력 |
+        |---|---|---|---|---|---|
+        | 1 |  |  |  |  |  |
+    - key: controls
+      normative: true
+      title: 통제점 / KPI
+      required: false
+      template: |
+        | 통제점 | 지표 | 목표 | 주기 |
+        |---|---|---|---|
+        |  |  |  |  |
+
+- code: WI
+  name: 업무지침서
+  description: 실무 수행 방법을 단계별로 정한다.
+  parent_type: PRO
+  sort: 3
+  sections:
+    - key: purpose
+      title: 업무 목적
+      required: true
+    - key: performer
+      title: 수행 주체
+      required: true
+      hint: 수행자, 검토자, 승인자의 역할명을 적는다.
+    - key: scope
+      title: 범위
+      required: false
+    - key: io
+      normative: true
+      title: 입력 자료 / 산출물
+      required: true
+      template: |
+        - **입력**:
+        - **산출물**:
+    - key: prep
+      title: 사전 준비
+      required: false
+    - key: steps
+      normative: true
+      title: 수행 단계
+      required: true
+      template: |
+        1.
+        2.
+        3.
+    - key: done
+      normative: true
+      title: 완료 조건
+      required: true
+      hint: 이 업무가 끝났다고 판단하는 기준을 적는다.
+    - key: interfaces
+      title: 인터페이스 부서
+      required: false
+    - key: exceptions
+      title: 주의사항 / 예외 처리
+      required: false
+
+- code: TMP
+  name: 템플릿
+  description: 기록에 쓰는 빈 양식. 예시 값은 넣지 않는다.
+  parent_type: WI
+  sort: 4
+  sections:
+    - key: guide
+      title: 작성 안내
+      required: false
+      hint: 작성자, 작성 시점, 결재 경로를 적는다.
+    - key: fields
+      normative: true
+      title: 기록 항목
+      required: true
+      template: |
+        | 항목 | 내용 |
+        |---|---|
+        | 제목 |  |
+        | 작성자 |  |
+        | 일자 |  |
+        | 내용 |  |
+        | 승인 |  |
+
+- code: EX
+  name: 작성예시
+  description: 교육용 샘플. 실제 기록으로 쓰지 않는다.
+  parent_type: WI
+  sort: 5
+  sections:
+    - key: sample
+      title: 샘플 입력값
+      required: true
+      template: |
+        | 항목 | 예시값 | 작성 요령 |
+        |---|---|---|
+        |  |  |  |
+    - key: cautions
+      title: 작성 시 유의사항
+      required: false
+    - key: bad_examples
+      title: 잘못된 작성 사례
+      required: false
+
+- code: REF
+  name: 참고자료
+  description: 외부 규정·가이드의 요약.
+  sort: 6
+  sections:
+    - key: summary
+      title: 요약
+      required: true
+    - key: key_clauses
+      title: 핵심 조항
+      required: false
+    - key: related
+      title: 관련 내부 문서
+      required: false
+    - key: source
+      title: 출처
+      required: true
+      hint: 발행처, 문서명, 발행일, 판을 적는다.
