@@ -17,6 +17,7 @@ import { useEffect } from "react";
 
 import { TypeBadge } from "@/components/bits";
 import {
+  Command,
   CommandDialog,
   CommandEmpty,
   CommandGroup,
@@ -76,80 +77,83 @@ export function CommandPalette({
       description="문서 번호나 제목, 화면 이름으로 찾습니다."
       className="sm:max-w-xl"
     >
-      <CommandInput placeholder="문서 번호·제목 또는 화면 이름" />
-      <CommandList>
-        <CommandEmpty>일치하는 항목이 없습니다.</CommandEmpty>
+      {/* 입력창과 목록은 Command 안에 있어야 한다(검색 상태를 거기서 공유한다). */}
+      <Command>
+        <CommandInput placeholder="문서 번호·제목 또는 화면 이름" />
+        <CommandList>
+          <CommandEmpty>일치하는 항목이 없습니다.</CommandEmpty>
 
-        {searchSystem && (documents.data?.length ?? 0) > 0 && (
-          <CommandGroup heading="문서">
-            {documents.data!.map((doc) => (
+          {searchSystem && (documents.data?.length ?? 0) > 0 && (
+            <CommandGroup heading="문서">
+              {documents.data!.map((doc) => (
+                <CommandItem
+                  key={doc.id}
+                  value={`${doc.code} ${doc.title}`}
+                  onSelect={() => go(routes.document(tenant, searchSystem, doc.id))}
+                >
+                  <TypeBadge type={doc.doc_type} />
+                  <span className="min-w-0 flex-1 truncate">{doc.title}</span>
+                  <CommandShortcut className="font-mono">{doc.code}</CommandShortcut>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+
+          <CommandGroup heading="이동">
+            <CommandItem value="받은 일 홈" onSelect={() => go(routes.home(tenant))}>
+              <InboxIcon />
+              받은 일
+            </CommandItem>
+            {systems.map((s) => (
               <CommandItem
-                key={doc.id}
-                value={`${doc.code} ${doc.title}`}
-                onSelect={() => go(routes.document(tenant, searchSystem, doc.id))}
+                key={s.id}
+                value={`체계 ${s.name} ${s.slug}`}
+                onSelect={() => go(routes.library(tenant, s.slug))}
               >
-                <TypeBadge type={doc.doc_type} />
-                <span className="min-w-0 flex-1 truncate">{doc.title}</span>
-                <CommandShortcut className="font-mono">{doc.code}</CommandShortcut>
+                <LibraryIcon />
+                {s.name}
               </CommandItem>
             ))}
+            <CommandItem value="원문 요건 표준 법규" onSelect={() => go(routes.sources(tenant))}>
+              <ScrollTextIcon />
+              원문과 요건
+            </CommandItem>
+            <CommandItem value="조직 체계 관리" onSelect={() => go(routes.org(tenant))}>
+              <NetworkIcon />
+              조직·체계
+            </CommandItem>
+            <CommandItem value="구성원 권한" onSelect={() => go(routes.members(tenant))}>
+              <UsersIcon />
+              구성원
+            </CommandItem>
+            {canReadAudit && (
+              <CommandItem value="감사 기록 이력" onSelect={() => go(routes.audit(tenant))}>
+                <HistoryIcon />
+                감사 기록
+              </CommandItem>
+            )}
+            {canManage && (
+              <CommandItem value="설정" onSelect={() => go(routes.settings(tenant))}>
+                <SettingsIcon />
+                설정
+              </CommandItem>
+            )}
           </CommandGroup>
-        )}
 
-        <CommandGroup heading="이동">
-          <CommandItem value="받은 일 홈" onSelect={() => go(routes.home(tenant))}>
-            <InboxIcon />
-            받은 일
-          </CommandItem>
-          {systems.map((s) => (
+          <CommandGroup heading="화면">
             <CommandItem
-              key={s.id}
-              value={`체계 ${s.name} ${s.slug}`}
-              onSelect={() => go(routes.library(tenant, s.slug))}
+              value="테마 밝게 어둡게 전환"
+              onSelect={() => {
+                setTheme(resolvedTheme === "dark" ? "light" : "dark");
+                onOpenChange(false);
+              }}
             >
-              <LibraryIcon />
-              {s.name}
+              {resolvedTheme === "dark" ? <SunIcon /> : <MoonIcon />}
+              {resolvedTheme === "dark" ? "밝은 화면으로" : "어두운 화면으로"}
             </CommandItem>
-          ))}
-          <CommandItem value="원문 요건 표준 법규" onSelect={() => go(routes.sources(tenant))}>
-            <ScrollTextIcon />
-            원문과 요건
-          </CommandItem>
-          <CommandItem value="조직 체계 관리" onSelect={() => go(routes.org(tenant))}>
-            <NetworkIcon />
-            조직·체계
-          </CommandItem>
-          <CommandItem value="구성원 권한" onSelect={() => go(routes.members(tenant))}>
-            <UsersIcon />
-            구성원
-          </CommandItem>
-          {canReadAudit && (
-            <CommandItem value="감사 기록 이력" onSelect={() => go(routes.audit(tenant))}>
-              <HistoryIcon />
-              감사 기록
-            </CommandItem>
-          )}
-          {canManage && (
-            <CommandItem value="설정" onSelect={() => go(routes.settings(tenant))}>
-              <SettingsIcon />
-              설정
-            </CommandItem>
-          )}
-        </CommandGroup>
-
-        <CommandGroup heading="화면">
-          <CommandItem
-            value="테마 밝게 어둡게 전환"
-            onSelect={() => {
-              setTheme(resolvedTheme === "dark" ? "light" : "dark");
-              onOpenChange(false);
-            }}
-          >
-            {resolvedTheme === "dark" ? <SunIcon /> : <MoonIcon />}
-            {resolvedTheme === "dark" ? "밝은 화면으로" : "어두운 화면으로"}
-          </CommandItem>
-        </CommandGroup>
-      </CommandList>
+          </CommandGroup>
+        </CommandList>
+      </Command>
     </CommandDialog>
   );
 }

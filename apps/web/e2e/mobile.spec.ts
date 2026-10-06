@@ -4,7 +4,8 @@ import { login, openDocument } from "./helpers";
 
 const shot = (name: string) => ({ path: `e2e/screenshots/mobile-${name}.png` });
 
-// 데모 회사(python -m app.cli demo)를 읽기만 한다.
+// 데모 회사(python -m app.cli demo)를 읽기만 한다. 데모 회사는 사람이 계속 쓰므로
+// 검토 대기 같은 그때그때의 상태에는 기대지 않는다.
 test("휴대폰 화면에서 받은 일과 문서를 본다", async ({ page }) => {
   await login(page, "qmr@example.com");
   await page.getByRole("link", { name: /데모 주식회사/ }).click();
@@ -12,7 +13,7 @@ test("휴대폰 화면에서 받은 일과 문서를 본다", async ({ page }) =
   // 좁은 화면에서는 옆 메뉴 대신 아래쪽 내비게이션을 쓴다.
   const bottomNav = page.getByRole("navigation").filter({ hasText: "받은 일" }).last();
   await expect(bottomNav).toBeVisible();
-  await expect(page.getByRole("heading", { name: "검토 요청" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "받은 일" })).toBeVisible();
   await page.screenshot(shot("01-inbox"));
 
   await bottomNav.getByRole("link", { name: "문서" }).click();
@@ -20,7 +21,7 @@ test("휴대폰 화면에서 받은 일과 문서를 본다", async ({ page }) =
   await page.screenshot(shot("02-library"));
 
   await openDocument(page, /개정 및 버전 관리 지침/);
-  await expect(page.getByRole("button", { name: "승인", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "개정 및 버전 관리 지침" })).toBeVisible();
   await page.screenshot(shot("03-document"));
 
   // 가로로 넘치는 요소가 없어야 한다.
