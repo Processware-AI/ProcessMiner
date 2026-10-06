@@ -237,16 +237,22 @@ export function useBasis(tenant: string, system: string) {
   });
 }
 
-export function useBasisRequirements(tenant: string, system: string, sourceId: string | null) {
-  return useQuery({
-    queryKey: keys.basisRequirements(tenant, system, sourceId ?? ""),
-    enabled: Boolean(sourceId),
+export function basisRequirementsQuery(tenant: string, system: string, sourceId: string) {
+  return {
+    queryKey: keys.basisRequirements(tenant, system, sourceId),
     queryFn: () =>
       unwrap(
         api.GET("/api/t/{tenant_slug}/systems/{system_slug}/basis/{source_id}/requirements", {
-          params: { path: { tenant_slug: tenant, system_slug: system, source_id: sourceId! } },
+          params: { path: { tenant_slug: tenant, system_slug: system, source_id: sourceId } },
         }),
       ),
+  };
+}
+
+export function useBasisRequirements(tenant: string, system: string, sourceId: string | null) {
+  return useQuery({
+    ...basisRequirementsQuery(tenant, system, sourceId ?? ""),
+    enabled: Boolean(sourceId),
   });
 }
 

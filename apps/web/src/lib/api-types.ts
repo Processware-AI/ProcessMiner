@@ -1241,6 +1241,12 @@ export interface components {
             parent: string | null;
             /** Requirements */
             requirements: string[];
+            /** By Standard */
+            by_standard: {
+                [key: string]: string[];
+            };
+            /** Integration Note */
+            integration_note: string;
             /** Status */
             status: string;
             /** Document Id */
@@ -1259,11 +1265,16 @@ export interface components {
             status: string;
             /** Scope Code */
             scope_code: string;
-            source: components["schemas"]["SourceRef"];
+            /** Sources */
+            sources: components["schemas"]["SourceRef"][];
             /** Model */
             model: string | null;
             /** Applicable Count */
             applicable_count: number;
+            /** Applicable By Standard */
+            applicable_by_standard: {
+                [key: string]: number;
+            };
             /** Uncovered */
             uncovered: string[];
             /** Nodes */
@@ -1281,11 +1292,8 @@ export interface components {
         };
         /** PlanStartIn */
         PlanStartIn: {
-            /**
-             * Source Id
-             * Format: uuid
-             */
-            source_id: string;
+            /** Source Ids */
+            source_ids: string[];
             /** Scope Code */
             scope_code: string;
         };

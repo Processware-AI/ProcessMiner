@@ -59,15 +59,14 @@ def _basis_out(ctx: TenantContext, system: ProcessSystem) -> BasisOut:
             select(AppUser).where(AppUser.id.in_({b.approved_by for b, _, _, _ in rows}))
         )
     }
-    plans = {p.source_id: p for p in reversed(plan_svc.list_plans(db, system.id))}
+    in_plan = basis_svc.sources_in_live_plans(db, system.id)
     can_manage = ctx.can("basis.manage", system.id)
 
     items = []
     for basis, source, total, excluded in rows:
         actions: list[str] = []
         approved = basis.approved_at is not None
-        plan = plans.get(source.id)
-        live = plan is not None and plan.status in basis_svc.LIVE_PLAN_STATUSES
+        live = source.id in in_plan
         if not approved:
             if can_manage:
                 actions += ["review", "detach"]
@@ -197,7 +196,7 @@ def reopen_basis(
 
 def _plan_out(ctx: TenantContext, system: ProcessSystem, plan: GenerationPlan) -> PlanOut:
     db = ctx.db
-    source = db.get(SourceDocument, plan.source_id)
+    sources = plan_svc.plan_sources(db, plan.id)
     run = plan_svc.latest_run(db, plan.id)
     busy = run is not None and run.status in plan_svc.ACTIVE_RUN_STATUSES
 
@@ -212,6 +211,8 @@ def _plan_out(ctx: TenantContext, system: ProcessSystem, plan: GenerationPlan) -
                 purpose=node.purpose,
                 parent=node.parent,
                 requirements=node.requirements,
+                by_standard=planning.by_standard(node.requirements),
+                integration_note=node.note,
                 status=result.get("status", "pending"),
                 document_id=result.get("document_id"),
                 error=result.get("error", ""),
@@ -228,13 +229,18 @@ def _plan_out(ctx: TenantContext, system: ProcessSystem, plan: GenerationPlan) -
         ):
             actions.append("discard")
 
+    applicable = {
+        source.code: len(basis_svc.applicable_requirements(db, system.id, source.id))
+        for source in sources
+    }
     return PlanOut(
         id=plan.id,
         status=plan.status,
         scope_code=plan.scope_code,
-        source=_source_ref(source),
+        sources=[_source_ref(source) for source in sources],
         model=plan.model,
-        applicable_count=len(basis_svc.applicable_requirements(db, system.id, plan.source_id)),
+        applicable_count=sum(applicable.values()),
+        applicable_by_standard=applicable,
         uncovered=plan.uncovered,
         nodes=nodes,
         created_at=plan.created_at,
@@ -268,7 +274,7 @@ def start_plan(
     plan = plan_svc.start_design(
         ctx.db,
         system=system,
-        source_id=payload.source_id,
+        source_ids=payload.source_ids,
         scope_code=payload.scope_code,
         actor_id=ctx.user.id,
     )
@@ -324,7 +330,7 @@ def list_revision_requirements(
         .join(SourceClause, SourceClause.id == Requirement.clause_id)
         .join(SourceDocument, SourceDocument.id == Requirement.source_id)
         .where(DocumentRequirement.revision_id == revision_id)
-        .order_by(SourceClause.position, Requirement.position)
+        .order_by(SourceDocument.code, SourceClause.position, Requirement.position)
     ).all()
     return [
         RevisionRequirementOut(

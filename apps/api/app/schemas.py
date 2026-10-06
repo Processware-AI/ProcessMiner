@@ -438,7 +438,8 @@ class ExclusionIn(BaseModel):
 
 
 class PlanStartIn(BaseModel):
-    source_id: uuid.UUID
+    # 함께 설계할 근거 원문. 여럿이면 하나의 문서 체계로 통합한다.
+    source_ids: list[uuid.UUID] = Field(min_length=1, max_length=8)
     scope_code: str = Field(pattern=r"^[A-Z]{2,8}$")
 
 
@@ -453,7 +454,10 @@ class PlanNodeOut(BaseModel):
     title: str
     purpose: str
     parent: str | None
-    requirements: list[str]  # 배정된 요건 코드
+    requirements: list[str]  # 배정된 요건 코드. "원문약칭 번호" 모양
+    # 배정된 요건을 표준별로 나눈 것: {"IEC62304": ["5.1.1-01", …]}
+    by_standard: dict[str, list[str]]
+    integration_note: str  # 여러 표준의 요건이 이 문서에서 어떻게 맞물리는지
     status: str  # pending | done | failed
     document_id: uuid.UUID | None
     error: str
@@ -463,9 +467,10 @@ class PlanOut(BaseModel):
     id: uuid.UUID
     status: str  # designing | proposed | writing | partial | done | failed
     scope_code: str
-    source: SourceRef
+    sources: list[SourceRef]
     model: str | None
     applicable_count: int
+    applicable_by_standard: dict[str, int]
     uncovered: list[str]
     nodes: list[PlanNodeOut]
     created_at: datetime

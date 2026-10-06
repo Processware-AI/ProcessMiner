@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.errors import api_error, not_found
 from app.models import (
     GenerationPlan,
+    PlanSource,
     ProcessSystem,
     Requirement,
     RequirementExclusion,
@@ -90,18 +91,17 @@ def attach(
     return basis
 
 
-def _has_live_plan(db: Session, system_id: uuid.UUID, source_id: uuid.UUID) -> bool:
-    return (
-        db.scalar(
-            select(GenerationPlan.id)
+def sources_in_live_plans(db: Session, system_id: uuid.UUID) -> set[uuid.UUID]:
+    """이 체계에서 이미 설계안(또는 그 설계안으로 만든 문서)의 근거가 된 원문."""
+    return set(
+        db.scalars(
+            select(PlanSource.source_id)
+            .join(GenerationPlan, GenerationPlan.id == PlanSource.plan_id)
             .where(
                 GenerationPlan.system_id == system_id,
-                GenerationPlan.source_id == source_id,
                 GenerationPlan.status.in_(LIVE_PLAN_STATUSES),
             )
-            .limit(1)
         )
-        is not None
     )
 
 
@@ -248,7 +248,7 @@ def reopen(
     """승인을 취소한다. 이 적용요건으로 문서를 설계·생성한 뒤에는 할 수 없다."""
     if basis.approved_at is None:
         raise api_error(409, "not_approved", "승인되지 않은 적용요건입니다.")
-    if _has_live_plan(db, system.id, basis.source_id):
+    if basis.source_id in sources_in_live_plans(db, system.id):
         raise api_error(
             409,
             "plan_exists",

@@ -23,13 +23,13 @@ from app.models import (
     Requirement,
     Run,
     RunEvent,
-    SourceDocument,
 )
 from app.pipelines import planning
 from app.pipelines.planning import GroundingError, PlanNode, RequirementBrief, WriteTask
 from app.schemas import DocumentIn
 from app.services import basis as basis_service
 from app.services import documents as doc_service
+from app.services import plans as plan_service
 
 logger = logging.getLogger(__name__)
 
@@ -49,23 +49,28 @@ def _finish(db: Session, run: Run, status: str, error: str = "") -> None:
 def _applicable(
     db: Session, plan: GenerationPlan
 ) -> tuple[dict[str, RequirementBrief], dict[str, Requirement]]:
+    """설계안의 모든 원문에서 적용요건을 모은다. 코드에는 원문 약칭을 붙여 서로 구분한다."""
     briefs: dict[str, RequirementBrief] = {}
     rows: dict[str, Requirement] = {}
-    for requirement, clause in basis_service.applicable_requirements(
-        db, plan.system_id, plan.source_id
-    ):
-        briefs[requirement.code] = RequirementBrief(
-            code=requirement.code,
-            clause_number=clause.number,
-            clause_title=clause.title,
-            obligation=requirement.obligation,
-            category=requirement.category,
-            summary=requirement.summary,
-            quote=requirement.quote,
-            applicability=requirement.applicability,
-            evidence=requirement.evidence,
-        )
-        rows[requirement.code] = requirement
+    for source in plan_service.plan_sources(db, plan.id):
+        for requirement, clause in basis_service.applicable_requirements(
+            db, plan.system_id, source.id
+        ):
+            code = planning.qualified_code(source.code, requirement.code)
+            briefs[code] = RequirementBrief(
+                code=code,
+                clause_number=clause.number,
+                clause_title=clause.title,
+                obligation=requirement.obligation,
+                category=requirement.category,
+                summary=requirement.summary,
+                quote=requirement.quote,
+                applicability=requirement.applicability,
+                evidence=requirement.evidence,
+                standard=source.code,
+                standard_title=source.title,
+            )
+            rows[code] = requirement
     return briefs, rows
 
 
@@ -75,7 +80,8 @@ def _applicable(
 def run_design(db: Session, run: Run) -> None:
     plan = db.get(GenerationPlan, run.plan_id)
     briefs, _ = _applicable(db, plan)
-    _log(db, run, f"적용요건 {len(briefs)}건으로 문서 구조를 설계합니다")
+    standards = list(dict.fromkeys(brief.standard for brief in briefs.values()))
+    _log(db, run, f"{', '.join(standards)} 적용요건 {len(briefs)}건으로 문서 구조를 설계합니다")
     db.commit()
 
     try:
@@ -99,12 +105,15 @@ def run_design(db: Session, run: Run) -> None:
     plan.status = "proposed"
     run.progress = {"input_tokens": result.input_tokens, "output_tokens": result.output_tokens}
     counts = {t: sum(n.doc_type == t for n in nodes) for t in _LEVELS}
+    shared = sum(len(planning.by_standard(n.requirements)) > 1 for n in nodes)
     _log(
         db,
         run,
         f"설계 완료: 정책 {counts['POL']}, 절차 {counts['PRO']}, 지침 {counts['WI']}, "
         f"템플릿 {counts['TMP']}",
     )
+    if len(standards) > 1:
+        _log(db, run, f"여러 표준의 요건을 함께 이행하는 문서 {shared}건")
     if result.uncovered:
         _log(db, run, f"배정되지 않은 요건 {len(result.uncovered)}건", level="error")
     _finish(db, run, "succeeded")
@@ -154,7 +163,7 @@ def _persist(
     *,
     plan: GenerationPlan,
     system: ProcessSystem,
-    source: SourceDocument,
+    standards: list[str],
     node: PlanNode,
     parent_document_id: str | None,
     written: planning.WriteResult,
@@ -175,9 +184,12 @@ def _persist(
     )
     revision = doc_service.open_revision(db, document.id)
     revision.sections = written.sections
-    revision.structured = {"citations": written.citations, "plan_id": str(plan.id)}
+    # 섹션별 근거는 document_requirement 에만 둔다(한곳에서만 관리한다).
+    revision.structured = {"plan_id": str(plan.id)}
     revision.generated_by = written.model
-    revision.change_summary = f"{source.code} 적용요건에서 생성"
+    cited = planning.by_standard([c for codes in written.citations.values() for c in codes])
+    basis = [s for s in standards if s in cited] or standards
+    revision.change_summary = f"{', '.join(basis)} 적용요건에서 생성"
     db.flush()
     for section_key, codes in written.citations.items():
         for code in codes:
@@ -197,7 +209,7 @@ def _persist(
 def run_write(db: Session, run: Run) -> None:
     plan = db.get(GenerationPlan, run.plan_id)
     system = db.get(ProcessSystem, plan.system_id)
-    source = db.get(SourceDocument, plan.source_id)
+    standards = [source.code for source in plan_service.plan_sources(db, plan.id)]
     briefs, requirement_rows = _applicable(db, plan)
     schemas = {row.code: row.sections for row in db.scalars(select(DocTypeDef))}
     nodes = planning.flatten(plan.structure)
@@ -253,7 +265,7 @@ def run_write(db: Session, run: Run) -> None:
                             db,
                             plan=plan,
                             system=system,
-                            source=source,
+                            standards=standards,
                             node=node,
                             parent_document_id=(
                                 results[node.parent]["document_id"] if node.parent else None

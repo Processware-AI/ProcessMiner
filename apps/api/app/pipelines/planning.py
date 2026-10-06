@@ -20,6 +20,9 @@ DESIGN_PROMPT = """\
 표준에서 뽑아 조직이 승인한 '적용요건' 목록이 주어집니다. 이 요건들을 조직이 실제로 운영할
 문서 체계로 묶어 주세요. 결과는 사람이 검토한 뒤 문서 작성에 쓰입니다.
 
+요건은 표준 하나에서 올 수도, 여러 표준에서 올 수도 있습니다. 여러 표준이 주어지면 조직은
+표준마다 따로 문서를 두지 않고, 하나의 통합된 문서 체계로 모든 표준을 함께 이행하려는 것입니다.
+
 문서 유형은 네 단계입니다.
 - 정책서: 조직의 원칙과 방침, 책임. 체계 전체에 1~3개면 충분합니다.
 - 절차서: 정책 아래에서 하나의 업무 흐름(누가 어떤 순서로)을 다룹니다.
@@ -39,6 +42,18 @@ DESIGN_PROMPT = """\
 5. 제목은 한국어로, 문서 유형이 드러나게 짓습니다(… 정책, … 절차, … 지침, 양식은 … 서·표·기록).
 6. purpose 는 그 문서가 다루는 범위를 한 문장으로 적습니다.
 7. requirements 에는 입력에 있는 요건 코드만 그대로 적습니다. 코드를 지어내지 않습니다.
+   코드는 "표준약칭 번호" 모양입니다(예: IEC62304 5.1.1-01). 약칭과 번호를 모두 적습니다.
+8. 여러 표준이 주어졌을 때의 통합 규칙
+   - 문서는 표준이 아니라 업무를 기준으로 나눕니다. 서로 다른 표준의 요건이라도 같은 활동
+     (예: 개발 계획 수립, 형상 관리, 문제 해결)에 관한 것이면 같은 문서에 함께 배정해,
+     실무자가 그 문서 하나를 따르면 관련된 모든 표준의 요건을 한 번에 이행하게 합니다.
+   - 표준 이름을 딴 문서 묶음(표준별 정책·절차)을 만들지 않습니다. 한 표준에만 있는 활동은
+     그 활동을 다루는 문서를 따로 두되, 될 수 있으면 관련 있는 기존 절차 아래에 둡니다.
+   - 겹치는 요건을 합칠 때 더 엄격하거나 더 구체적인 쪽이 빠지지 않게 합니다. 요건 코드는
+     합치지 않고 각각 그대로 배정합니다.
+   - integration_note 에는 그 문서가 여러 표준의 요건을 함께 다룰 때, 표준들의 요건이 어떻게
+     맞물리는지 한두 문장으로 적습니다(무엇이 겹치고, 어느 표준이 무엇을 더 요구하는지).
+     표준 하나의 요건만 다루는 문서는 빈 문자열로 둡니다.
 """
 
 PLACEMENT_PROMPT = """\
@@ -53,6 +68,9 @@ class PlannedInstruction(BaseModel):
     title: str
     purpose: str
     requirements: list[str] = Field(description="이 지침이 이행하는 요건 코드")
+    integration_note: str = Field(
+        description="여러 표준의 요건이 이 문서에서 어떻게 맞물리는지. 없으면 빈 문자열"
+    )
     templates: list[str] = Field(description="기록 양식 제목. 없으면 빈 목록")
 
 
@@ -60,6 +78,9 @@ class PlannedProcedure(BaseModel):
     title: str
     purpose: str
     requirements: list[str] = Field(description="절차 수준에서 이행하는 요건 코드")
+    integration_note: str = Field(
+        description="여러 표준의 요건이 이 절차에서 어떻게 맞물리는지. 없으면 빈 문자열"
+    )
     instructions: list[PlannedInstruction]
 
 
@@ -87,7 +108,7 @@ class PlacementOutput(BaseModel):
 class RequirementBrief:
     """모델에 보여주는 요건 한 건."""
 
-    code: str
+    code: str  # 원문 약칭을 붙인 코드. 예: "IEC62304 5.1.1-01"
     clause_number: str
     clause_title: str
     obligation: str
@@ -96,6 +117,8 @@ class RequirementBrief:
     quote: str = ""
     applicability: str = ""
     evidence: list[str] = field(default_factory=list)
+    standard: str = ""  # 원문 약칭. 예: IEC62304
+    standard_title: str = ""
 
 
 @dataclass
@@ -108,16 +131,35 @@ class PlanNode:
     purpose: str
     requirements: list[str]
     parent: str | None
+    note: str = ""  # 여러 표준의 요건이 이 문서에서 어떻게 맞물리는지
 
     @property
     def depth(self) -> int:
         return self.path.count(".")
 
 
+def qualified_code(standard: str, code: str) -> str:
+    """여러 원문을 함께 다루면 "5.1.1-01" 같은 코드가 겹치므로 원문 약칭을 앞에 붙인다."""
+    return f"{standard} {code}"
+
+
+def by_standard(codes: list[str]) -> dict[str, list[str]]:
+    """요건 코드를 표준별로 나눈다. {"IEC62304": ["5.1.1-01", …], …}"""
+    grouped: dict[str, list[str]] = {}
+    for code in codes:
+        standard, _, bare = code.rpartition(" ")
+        grouped.setdefault(standard, []).append(bare)
+    return grouped
+
+
 def _requirement_listing(requirements: list[RequirementBrief]) -> str:
     lines: list[str] = []
-    clause = None
+    standard = clause = None
     for r in requirements:
+        if r.standard != standard:
+            standard, clause = r.standard, None
+            if r.standard:
+                lines.append(f"\n# 표준 {r.standard} — {r.standard_title}".rstrip(" —"))
         if r.clause_number != clause:
             clause = r.clause_number
             lines.append(f"\n## {r.clause_number} {r.clause_title}")
@@ -138,7 +180,13 @@ def flatten(structure: dict[str, Any]) -> list[PlanNode]:
             r = f"{p}.r{ri}"
             nodes.append(
                 PlanNode(
-                    r, "PRO", procedure["title"], procedure["purpose"], procedure["requirements"], p
+                    r,
+                    "PRO",
+                    procedure["title"],
+                    procedure["purpose"],
+                    procedure["requirements"],
+                    p,
+                    procedure.get("integration_note", ""),
                 )
             )
             for wi, instruction in enumerate(procedure.get("instructions", [])):
@@ -151,6 +199,7 @@ def flatten(structure: dict[str, Any]) -> list[PlanNode]:
                         instruction["purpose"],
                         instruction["requirements"],
                         r,
+                        instruction.get("integration_note", ""),
                     )
                 )
                 for ti, template in enumerate(instruction.get("templates", [])):
@@ -161,11 +210,13 @@ def flatten(structure: dict[str, Any]) -> list[PlanNode]:
 def normalize(structure: dict[str, Any], valid_codes: set[str]) -> tuple[dict[str, Any], list[str]]:
     """설계안을 정리한다: 없는 코드와 중복 배정을 지우고, 배정되지 않은 요건을 찾는다."""
     seen: set[str] = set()
+    # 모델이 약칭과 번호 사이의 공백을 다르게 적어도 같은 코드로 본다.
+    canonical = {"".join(code.split()): code for code in valid_codes}
 
     def clean(codes: list[str]) -> list[str]:
         kept = []
         for code in codes:
-            code = code.strip()
+            code = canonical.get("".join(code.split()), "")
             if code in valid_codes and code not in seen:
                 seen.add(code)
                 kept.append(code)
@@ -201,6 +252,14 @@ def _apply_placements(structure: dict[str, Any], placements: list[Placement]) ->
             target["requirements"].append(placement.code.strip())
 
 
+def _design_request(requirements: list[RequirementBrief]) -> str:
+    standards = list(dict.fromkeys(r.standard for r in requirements if r.standard))
+    head = f"적용요건 {len(requirements)}건"
+    if len(standards) > 1:
+        head += f" — 표준 {len(standards)}개({', '.join(standards)})를 통합합니다"
+    return f"{head}\n\n{_requirement_listing(requirements)}"
+
+
 @dataclass
 class DesignResult:
     structure: dict[str, Any]
@@ -215,7 +274,7 @@ def design(requirements: list[RequirementBrief]) -> DesignResult:
     valid = {r.code for r in requirements}
     first = llm.structured(
         system=DESIGN_PROMPT,
-        user=f"적용요건 {len(requirements)}건\n\n{_requirement_listing(requirements)}",
+        user=_design_request(requirements),
         schema=DesignOutput,
         max_tokens=48000,
     )
@@ -272,6 +331,13 @@ WRITE_PROMPT = """\
    - 절차서: 누가 어떤 순서로 무엇을 넘겨받고 넘겨주는지. 흐름도는 mermaid flowchart 로 그립니다.
    - 업무지침서: 실무자가 그대로 따라 할 수 있는 단계와 완료 조건.
    - 템플릿: 빈 양식입니다. 기록 항목만 두고 예시 값은 넣지 않습니다.
+8. 요건이 여러 표준에서 왔으면(코드 앞의 약칭이 다릅니다) 표준별로 문단이나 단계를 나누지
+   말고, 실무자가 한 번 수행해 모든 표준을 함께 충족하는 하나의 흐름으로 씁니다.
+   - 같은 활동에 대한 요건이 겹치면 한 단계로 합치되, 더 엄격하거나 더 구체적인 쪽을 기준으로
+     삼고 다른 표준이 더 요구하는 것(추가 항목·기록·검토)을 그 단계에 포함합니다.
+   - 한 단계가 여러 표준의 요건을 이행하면 그 요건 코드를 모두 근거로 적습니다.
+   - 본문에서 표준 이름을 되풀이해 부르지 않습니다. 어느 표준 때문인지는 근거 코드가 말해 줍니다.
+   - '통합 방향'이 주어지면 그에 맞춰 씁니다.
 """
 
 
@@ -307,6 +373,8 @@ def _write_request(task: WriteTask, feedback: str = "") -> str:
     ]
     if task.node.purpose:
         parts.append(f"다루는 범위: {task.node.purpose}")
+    if task.node.note:
+        parts.append(f"통합 방향: {task.node.note}")
     if task.ancestors:
         parts.append("상위 문서: " + " > ".join(task.ancestors))
     if task.children:

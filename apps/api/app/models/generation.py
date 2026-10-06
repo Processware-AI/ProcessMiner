@@ -66,9 +66,6 @@ class GenerationPlan(Base):
         nullable=False,
         index=True,
     )
-    source_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("source_document.id", ondelete="RESTRICT"), nullable=False
-    )
     scope_code: Mapped[str] = mapped_column(String(8), nullable=False)
     # designing → proposed → writing → done | failed | discarded
     status: Mapped[str] = mapped_column(String(12), nullable=False, default="designing")
@@ -88,6 +85,20 @@ class GenerationPlan(Base):
         UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="SET NULL")
     )
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PlanSource(Base):
+    """설계안이 근거로 삼는 원문. 여러 표준을 한 설계안에서 통합할 수 있다."""
+
+    __tablename__ = "plan_source"
+
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("generation_plan.id", ondelete="CASCADE"), primary_key=True
+    )
+    source_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("source_document.id", ondelete="RESTRICT"), primary_key=True
+    )
+    tenant_id: Mapped[uuid.UUID] = tenant_fk()
 
 
 class DocumentRequirement(Base):

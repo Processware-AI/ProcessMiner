@@ -101,6 +101,8 @@ __pycache__/
 venv/
 dist/
 build/
+# 웹 화면의 경로(…/s/[system]/build)는 빌드 산출물이 아니다
+!apps/web/src/**/build/
 *.egg-info/
 
 # ==========================================

@@ -49,16 +49,20 @@ export function RevisionView({
 /** 한 섹션이 근거로 삼은 요건. 접어 두고 필요할 때 펼쳐 원문 인용까지 본다. */
 export function SectionCitations({ citations }: { citations: RevisionRequirement[] }) {
   if (citations.length === 0) return null;
+  const perSource = new Map<string, number>();
+  for (const { source } of citations) perSource.set(source.code, (perSource.get(source.code) ?? 0) + 1);
   return (
     <details className="mt-3 rounded-lg bg-muted/50 text-sm">
       <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground select-none">
         근거 요건 {citations.length}건 ·{" "}
         <span className="font-mono font-normal">
-          {citations
-            .slice(0, 6)
-            .map((c) => c.requirement.code)
-            .join(", ")}
-          {citations.length > 6 && " …"}
+          {perSource.size > 1
+            ? // 여러 표준을 함께 이행하는 섹션: 번호만으로는 어느 표준인지 알 수 없다.
+              [...perSource].map(([code, count]) => `${code} ${count}`).join(" · ")
+            : citations
+                .slice(0, 6)
+                .map((c) => c.requirement.code)
+                .join(", ") + (citations.length > 6 ? " …" : "")}
         </span>
       </summary>
       <ul className="space-y-3 border-t border-border px-3 py-3">

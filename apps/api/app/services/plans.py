@@ -10,10 +10,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.errors import api_error, not_found
-from app.models import GenerationPlan, ProcessSystem, Run, ScopeCode, SystemBasis
+from app.models import (
+    GenerationPlan,
+    PlanSource,
+    ProcessSystem,
+    Run,
+    ScopeCode,
+    SourceDocument,
+    SystemBasis,
+)
 from app.pipelines import planning
 from app.services import audit
-from app.services.basis import LIVE_PLAN_STATUSES
+from app.services.basis import sources_in_live_plans
 
 ACTIVE_RUN_STATUSES = ("queued", "running")
 
@@ -36,6 +44,24 @@ def list_plans(db: Session, system_id: uuid.UUID) -> list[GenerationPlan]:
     )
 
 
+def plan_sources(db: Session, plan_id: uuid.UUID) -> list[SourceDocument]:
+    """설계안이 근거로 삼는 원문. 체계의 근거로 추가한 순서."""
+    return list(
+        db.scalars(
+            select(SourceDocument)
+            .join(PlanSource, PlanSource.source_id == SourceDocument.id)
+            .join(GenerationPlan, GenerationPlan.id == PlanSource.plan_id)
+            .join(
+                SystemBasis,
+                (SystemBasis.system_id == GenerationPlan.system_id)
+                & (SystemBasis.source_id == SourceDocument.id),
+            )
+            .where(PlanSource.plan_id == plan_id)
+            .order_by(SystemBasis.created_at, SourceDocument.code)
+        )
+    )
+
+
 def latest_run(db: Session, plan_id: uuid.UUID) -> Run | None:
     return db.scalar(
         select(Run).where(Run.plan_id == plan_id).order_by(Run.created_at.desc()).limit(1)
@@ -51,43 +77,57 @@ def start_design(
     db: Session,
     *,
     system: ProcessSystem,
-    source_id: uuid.UUID,
+    source_ids: list[uuid.UUID],
     scope_code: str,
     actor_id: uuid.UUID,
 ) -> GenerationPlan:
-    basis = db.get(SystemBasis, {"system_id": system.id, "source_id": source_id})
-    if basis is None:
-        raise not_found("근거 원문")
-    if basis.approved_at is None:
-        raise api_error(
-            409, "basis_not_approved", "적용요건을 승인한 뒤에 문서 구조를 설계할 수 있습니다."
-        )
+    """원문 하나 또는 여럿의 적용요건으로 문서 구조를 설계한다.
+
+    여럿을 고르면 표준별로 문서를 따로 두지 않고 하나의 체계로 통합해 설계한다.
+    """
+    source_ids = list(dict.fromkeys(source_ids))
+    sources: list[SourceDocument] = []
+    for source_id in source_ids:
+        basis = db.get(SystemBasis, {"system_id": system.id, "source_id": source_id})
+        if basis is None:
+            raise not_found("근거 원문")
+        if basis.approved_at is None:
+            raise api_error(
+                409, "basis_not_approved", "적용요건을 승인한 뒤에 문서 구조를 설계할 수 있습니다."
+            )
+        sources.append(db.get(SourceDocument, source_id))
     if db.scalar(select(ScopeCode.id).where(ScopeCode.code == scope_code)) is None:
         raise api_error(422, "unknown_scope", f"등록되지 않은 영역코드입니다: {scope_code}")
-    existing = db.scalar(
-        select(GenerationPlan).where(
-            GenerationPlan.system_id == system.id,
-            GenerationPlan.source_id == source_id,
-            GenerationPlan.status.in_(LIVE_PLAN_STATUSES),
+    codes = [source.code for source in sources]
+    if len(set(codes)) < len(codes):
+        # 요건 코드를 "약칭 번호" 로 구분하므로 약칭이 같으면 어느 원문의 요건인지 알 수 없다.
+        raise api_error(
+            409,
+            "duplicate_source_code",
+            "약칭이 같은 원문을 함께 설계할 수 없습니다. 원문의 약칭을 서로 다르게 하세요.",
         )
-    )
-    if existing is not None:
+    taken = sources_in_live_plans(db, system.id) & set(source_ids)
+    if taken:
+        names = ", ".join(source.code for source in sources if source.id in taken)
         raise api_error(
             409,
             "plan_exists",
-            "이 원문으로 만든 설계안이 이미 있습니다. 새로 설계하려면 먼저 버리세요.",
+            f"이미 설계안이 있는 원문입니다({names}). 새로 설계하려면 먼저 그 설계안을 버리세요.",
         )
 
     plan = GenerationPlan(
         tenant_id=system.tenant_id,
         system_id=system.id,
-        source_id=source_id,
         scope_code=scope_code,
         status="designing",
         created_by=actor_id,
     )
     db.add(plan)
     db.flush()
+    db.add_all(
+        PlanSource(plan_id=plan.id, source_id=source.id, tenant_id=system.tenant_id)
+        for source in sources
+    )
     db.add(
         Run(
             tenant_id=system.tenant_id,
@@ -105,7 +145,7 @@ def start_design(
         action="plan.design",
         entity_type="plan",
         entity_id=plan.id,
-        data={"system": system.slug, "scope_code": scope_code},
+        data={"system": system.slug, "scope_code": scope_code, "sources": codes},
     )
     return plan
 

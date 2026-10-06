@@ -4248,6 +4248,20 @@
             "type": "array",
             "title": "Requirements"
           },
+          "by_standard": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "By Standard"
+          },
+          "integration_note": {
+            "type": "string",
+            "title": "Integration Note"
+          },
           "status": {
             "type": "string",
             "title": "Status"
@@ -4277,6 +4291,8 @@
           "purpose",
           "parent",
           "requirements",
+          "by_standard",
+          "integration_note",
           "status",
           "document_id",
           "error"
@@ -4298,8 +4314,12 @@
             "type": "string",
             "title": "Scope Code"
           },
-          "source": {
-            "$ref": "#/components/schemas/SourceRef"
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            },
+            "type": "array",
+            "title": "Sources"
           },
           "model": {
             "anyOf": [
@@ -4315,6 +4335,13 @@
           "applicable_count": {
             "type": "integer",
             "title": "Applicable Count"
+          },
+          "applicable_by_standard": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Applicable By Standard"
           },
           "uncovered": {
             "items": {
@@ -4370,9 +4397,10 @@
           "id",
           "status",
           "scope_code",
-          "source",
+          "sources",
           "model",
           "applicable_count",
+          "applicable_by_standard",
           "uncovered",
           "nodes",
           "created_at",
@@ -4384,10 +4412,15 @@
       },
       "PlanStartIn": {
         "properties": {
-          "source_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Source Id"
+          "source_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Source Ids"
           },
           "scope_code": {
             "type": "string",
@@ -4397,7 +4430,7 @@
         },
         "type": "object",
         "required": [
-          "source_id",
+          "source_ids",
           "scope_code"
         ],
         "title": "PlanStartIn"

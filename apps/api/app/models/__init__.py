@@ -1,7 +1,13 @@
 from .audit import AuditLog
 from .base import Base
 from .documents import DocSequence, Document, DocumentLink, DocumentRevision
-from .generation import DocumentRequirement, GenerationPlan, RequirementExclusion, SystemBasis
+from .generation import (
+    DocumentRequirement,
+    GenerationPlan,
+    PlanSource,
+    RequirementExclusion,
+    SystemBasis,
+)
 from .platform import (
     AppUser,
     AuthSession,
@@ -34,6 +40,7 @@ TENANT_TABLES = [
     "system_basis",
     "requirement_exclusion",
     "generation_plan",
+    "plan_source",
     "document_requirement",
 ]
 
@@ -53,6 +60,7 @@ __all__ = [
     "LoginToken",
     "Membership",
     "OrgUnit",
+    "PlanSource",
     "ProcessSystem",
     "Requirement",
     "RequirementExclusion",
