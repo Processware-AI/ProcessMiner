@@ -115,12 +115,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh">
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
+      <aside className="sticky top-0 hidden h-dvh print:hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
         {nav}
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-border bg-background/85 px-3 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-30 flex h-12 print:hidden items-center gap-2 border-b border-border bg-background/85 px-3 backdrop-blur md:hidden">
           <Button variant="ghost" size="icon" aria-label="메뉴" onClick={() => setMenuOpen(true)}>
             <MenuIcon />
           </Button>
@@ -150,7 +150,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {children}
         </main>
 
-        <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-border bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-30 grid print:hidden grid-cols-4 border-t border-border bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
           <BottomLink
             href={routes.home(tenant)}
             active={pathname === routes.home(tenant)}

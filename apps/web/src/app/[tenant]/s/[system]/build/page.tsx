@@ -38,6 +38,7 @@ import {
   usePlans,
   useScopeCodes,
   useSystem,
+  useDocuments,
 } from "@/lib/queries";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -495,6 +496,13 @@ function DesignForm({
   onDone: () => Promise<void>;
 }) {
   const scopeCodes = useScopeCodes(tenant);
+  const documents = useDocuments(tenant, system);
+  // 이 체계가 고칠 수 있는 문서(물려받은 것 말고)가 있으면 새로 만들지 않고 거기에 더하는 것이 기본이다.
+  const ownDocuments = (documents.data ?? []).filter(
+    (d) => ["own", "override", "added"].includes(d.tailoring) && d.doc_type !== "TMP",
+  ).length;
+  const [mode, setMode] = useState<"new" | "extend" | null>(null);
+  const effectiveMode = mode ?? (ownDocuments > 0 ? "extend" : "new");
   const [scopeCode, setScopeCode] = useState("");
   const [picked, setPicked] = useState(() => candidates.map((item) => item.source.id));
   const chosen = candidates.filter((item) => picked.includes(item.source.id));
@@ -504,7 +512,11 @@ function DesignForm({
       unwrap(
         api.POST("/api/t/{tenant_slug}/systems/{system_slug}/plans", {
           params: { path: { tenant_slug: tenant, system_slug: system } },
-          body: { source_ids: chosen.map((item) => item.source.id), scope_code: scopeCode },
+          body: {
+            source_ids: chosen.map((item) => item.source.id),
+            mode: effectiveMode,
+            ...(effectiveMode === "new" ? { scope_code: scopeCode } : {}),
+          },
         }),
       ),
     onSuccess: onDone,
@@ -562,21 +574,68 @@ function DesignForm({
           </p>
         </fieldset>
       )}
-      <Field label="영역" hint="생성되는 문서 번호에 들어갑니다. 예: POL-MDSW-01">
-        <NativeSelect value={scopeCode} onChange={(e) => setScopeCode(e.target.value)} required>
-          <option value="" disabled>
-            영역 선택
-          </option>
-          {(scopeCodes.data ?? []).map((scope) => (
-            <option key={scope.code} value={scope.code}>
-              {scope.code} · {scope.name}
-            </option>
+      {ownDocuments > 0 && (
+        <fieldset className="grid min-w-0 gap-2">
+          <legend className="mb-1 text-sm font-medium">어떻게 반영할까요</legend>
+          {(
+            [
+              [
+                "extend",
+                "기존 문서에 더하기",
+                `이 체계의 문서 ${ownDocuments}건 가운데 같은 활동을 다루는 문서를 개정해 새 요건을 반영하고, 맞는 문서가 없을 때만 새 절차·지침을 만듭니다.`,
+              ],
+              [
+                "new",
+                "새 문서 체계로 설계",
+                "기존 문서와 별도로 정책부터 새로 만듭니다. 같은 활동의 문서가 둘이 될 수 있습니다.",
+              ],
+            ] as const
+          ).map(([value, label, hint]) => (
+            <label
+              key={value}
+              className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-2 text-sm has-checked:border-primary/50 has-checked:bg-primary/5"
+            >
+              <input
+                type="radio"
+                name="mode"
+                className="mt-0.5 size-4 accent-primary"
+                checked={effectiveMode === value}
+                onChange={() => setMode(value)}
+              />
+              <span className="min-w-0">
+                <span className="block font-medium">{label}</span>
+                <span className="block text-xs text-muted-foreground text-pretty">{hint}</span>
+              </span>
+            </label>
           ))}
-        </NativeSelect>
-      </Field>
+        </fieldset>
+      )}
+      {effectiveMode === "new" && (
+        <Field label="영역" hint="생성되는 문서 번호에 들어갑니다. 예: POL-MDSW-01">
+          <NativeSelect value={scopeCode} onChange={(e) => setScopeCode(e.target.value)} required>
+            <option value="" disabled>
+              영역 선택
+            </option>
+            {(scopeCodes.data ?? []).map((scope) => (
+              <option key={scope.code} value={scope.code}>
+                {scope.code} · {scope.name}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+      )}
       <DialogFooter>
-        <Button type="submit" disabled={!scopeCode || chosen.length === 0 || start.isPending}>
-          {chosen.length > 1 ? `표준 ${chosen.length}개 통합 설계 시작` : "설계 시작"}
+        <Button
+          type="submit"
+          disabled={
+            (effectiveMode === "new" && !scopeCode) || chosen.length === 0 || start.isPending
+          }
+        >
+          {effectiveMode === "extend"
+            ? "기존 문서에 반영할 곳 찾기"
+            : chosen.length > 1
+              ? `표준 ${chosen.length}개 통합 설계 시작`
+              : "설계 시작"}
         </Button>
       </DialogFooter>
     </form>
@@ -584,6 +643,71 @@ function DesignForm({
 }
 
 // ── 2. 설계안과 문서 생성 ────────────────────────────────────────────────────
+
+/** 기존 문서에 표준을 더하는 설계안: 개정할 문서와, 기존 문서 아래에 새로 붙일 문서. */
+function ExtensionList({ tenant, system, nodes }: { tenant: string; system: string; nodes: PlanNode[] }) {
+  const groups = [
+    { title: "개정할 기존 문서", hint: "새 요건을 반영해 새 개정판(초안)을 만듭니다", rows: nodes.filter((n) => n.target) },
+    { title: "새로 만들 문서", hint: "기존 문서 아래에 붙입니다", rows: nodes.filter((n) => !n.target) },
+  ];
+  return (
+    <div className="divide-y divide-border">
+      {groups.map(
+        (group) =>
+          group.rows.length > 0 && (
+            <div key={group.title} className="px-4 py-3">
+              <p className="mb-1.5 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{group.title}</span> · {group.hint}
+              </p>
+              <ul className="space-y-1.5">
+                {group.rows.map((node) => {
+                  const linkTo = node.document_id ?? node.target?.id;
+                  return (
+                    <li
+                      key={node.path}
+                      className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm"
+                      style={{ paddingLeft: node.parent ? "1.5rem" : undefined }}
+                    >
+                      <TypeBadge type={node.doc_type} />
+                      {linkTo ? (
+                        <Link href={routes.document(tenant, system, linkTo)} className="font-medium hover:underline">
+                          {node.title}
+                        </Link>
+                      ) : (
+                        <span className="font-medium">{node.title}</span>
+                      )}
+                      {node.target && <span className="font-mono text-xs text-muted-foreground">{node.target.code}</span>}
+                      {node.anchor && (
+                        <span className="text-xs text-muted-foreground">
+                          → {node.anchor.code} {node.anchor.title} 아래
+                        </span>
+                      )}
+                      {node.requirements.length > 0 && (
+                        <span className="text-xs text-violet-700 dark:text-violet-300">
+                          +요건 {node.requirements.length}
+                        </span>
+                      )}
+                      {node.status === "done" && (
+                        <CheckIcon className="size-4 text-emerald-600 dark:text-emerald-400" aria-label="반영됨" />
+                      )}
+                      {node.status === "failed" && (
+                        <span className="basis-full text-xs text-amber-700 dark:text-amber-300">{node.error}</span>
+                      )}
+                      {node.integration_note && (
+                        <span className="basis-full text-xs text-muted-foreground text-pretty">
+                          {node.integration_note}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ),
+      )}
+    </div>
+  );
+}
 
 const PLAN_STATUS: Record<string, { label: string; style: string }> = {
   designing: { label: "설계 중", style: "bg-sky-500/12 text-sky-700 dark:text-sky-300" },
@@ -643,6 +767,8 @@ function PlanCard({
   const pending = plan.nodes.length - done;
   const progress = plan.run?.progress as { done?: number; failed?: number; total?: number } | undefined;
   const multi = plan.sources.length > 1;
+  const extend = plan.mode === "extend";
+  const updates = plan.nodes.filter((n) => n.target);
   const shared = plan.nodes.filter((n) => Object.keys(n.by_standard).length > 1);
   const [comparing, setComparing] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -655,12 +781,19 @@ function PlanCard({
             <span className="font-mono text-sm text-muted-foreground">
               {plan.sources.map((source) => source.code).join(" + ")}
             </span>
-            {multi ? "통합 문서 구조 설계안" : "문서 구조 설계안"}
+            {extend ? "기존 문서 반영안" : multi ? "통합 문서 구조 설계안" : "문서 구조 설계안"}
             <span className={cn("inline-flex h-5 items-center rounded-md px-1.5 text-xs", status.style)}>
               {status.label}
             </span>
           </p>
-          {plan.nodes.length > 0 && (
+          {plan.nodes.length > 0 && extend && (
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              기존 문서 개정 {updates.length}건 · 새 문서 {plan.nodes.length - updates.length}건 ·
+              적용요건 {plan.applicable_count}건
+              {done > 0 && ` · 반영 ${done}/${plan.nodes.length}`}
+            </p>
+          )}
+          {plan.nodes.length > 0 && !extend && (
             <p className="mt-0.5 text-xs text-muted-foreground">
               정책 {counts.POL} · 절차 {counts.PRO} · 지침 {counts.WI} · 템플릿 {counts.TMP} · 적용요건{" "}
               {plan.applicable_count}건
@@ -686,7 +819,11 @@ function PlanCard({
         {canWrite && (
           <Button disabled={write.isPending} onClick={() => write.mutate(null)}>
             <SparklesIcon />
-            {done > 0 ? `남은 문서 ${pending}건 생성` : `문서 ${pending}건 모두 생성`}
+            {extend
+              ? `${pending}건 반영`
+              : done > 0
+                ? `남은 문서 ${pending}건 생성`
+                : `문서 ${pending}건 모두 생성`}
           </Button>
         )}
       </div>
@@ -757,6 +894,10 @@ function PlanCard({
             </Button>
           )}
         </div>
+      )}
+
+      {extend && plan.nodes.length > 0 && (
+        <ExtensionList tenant={tenant} system={system} nodes={plan.nodes} />
       )}
 
       {policies.map((policy) => (

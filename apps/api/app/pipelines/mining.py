@@ -39,6 +39,12 @@ SYSTEM_PROMPT = """\
 7. evidence 에는 이 요구사항을 지켰음을 보여줄 산출물·기록을 한국어 명사구로 적습니다.
    원문이 직접 언급하거나 요구사항에서 바로 따라 나오는 것만 적고, 없으면 비웁니다.
 
+8. 프로세스 평가 모델(예: Automotive SPICE)의 기본 프랙티스(BP)와 프로세스 결과(outcome)는
+   조직이 그 프로세스를 수행한다고 인정받기 위한 기대사항이므로, shall 이 없어도 요구사항으로
+   봅니다. 기본 프랙티스 하나가 요구사항 하나이고, obligation 은 shall 로 둡니다. clause 에는
+   기본 프랙티스의 ID(예: SWE.1.BP1)를, 프로세스 결과는 프로세스 ID(예: SWE.1)를 적습니다.
+   NOTE 와 출력 정보 항목(output information items) 목록은 요구사항이 아닙니다.
+
 요구사항이 하나도 없는 절이면 빈 목록을 돌려주세요.
 """
 
@@ -98,7 +104,11 @@ def build_units(clauses: list[Clause], unit_level: int = 2) -> list[MiningUnit]:
         parts = clause.number.split(".")
         key = ".".join(parts[:unit_level])
         units.setdefault(key, MiningUnit(number=key, clauses=[])).clauses.append(clause)
-    return [u for u in units.values() if any(has_obligation(c) for c in u.clauses)]
+    return [
+        u
+        for u in units.values()
+        if any(c.kind in ("process", "practice") or has_obligation(c) for c in u.clauses)
+    ]
 
 
 def _squash(text: str) -> str:

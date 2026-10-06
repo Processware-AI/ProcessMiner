@@ -1,8 +1,9 @@
 """체계의 근거(적용요건)와, 요건에서 문서를 생성하는 설계안."""
 
 import uuid
+from datetime import UTC, date, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,7 @@ from app.deps import TenantContext, tenant_context
 from app.errors import not_found
 from app.models import (
     AppUser,
+    Document,
     DocumentRequirement,
     GenerationPlan,
     ProcessSystem,
@@ -26,6 +28,7 @@ from app.schemas import (
     BasisOut,
     BasisRequirementOut,
     CoverageOut,
+    DocumentRef,
     ExclusionIn,
     PlanEditIn,
     PlanNodeOut,
@@ -36,6 +39,7 @@ from app.schemas import (
     SourceRef,
     UserRef,
 )
+from app.services import audit as audit_svc
 from app.services import basis as basis_svc
 from app.services import coverage as coverage_svc
 from app.services import documents as doc_svc
@@ -203,8 +207,21 @@ def _plan_out(ctx: TenantContext, system: ProcessSystem, plan: GenerationPlan) -
     run = plan_svc.latest_run(db, plan.id)
     busy = run is not None and run.status in plan_svc.ACTIVE_RUN_STATUSES
 
+    flat = planning.flatten(plan.structure)
+    linked = (
+        {
+            doc.id: DocumentRef(id=doc.id, code=doc.code, title=doc.title, doc_type=doc.doc_type)
+            for doc in db.scalars(
+                select(Document).where(
+                    Document.id.in_({uuid.UUID(x) for n in flat for x in (n.target, n.anchor) if x})
+                )
+            )
+        }
+        if any(n.target or n.anchor for n in flat)
+        else {}
+    )
     nodes = []
-    for node in planning.flatten(plan.structure):
+    for node in flat:
         result = plan.results.get(node.path, {})
         nodes.append(
             PlanNodeOut(
@@ -216,6 +233,8 @@ def _plan_out(ctx: TenantContext, system: ProcessSystem, plan: GenerationPlan) -
                 requirements=node.requirements,
                 by_standard=planning.by_standard(node.requirements),
                 integration_note=node.note,
+                target=linked.get(uuid.UUID(node.target)) if node.target else None,
+                anchor=linked.get(uuid.UUID(node.anchor)) if node.anchor else None,
                 status=result.get("status", "pending"),
                 document_id=result.get("document_id"),
                 error=result.get("error", ""),
@@ -227,7 +246,7 @@ def _plan_out(ctx: TenantContext, system: ProcessSystem, plan: GenerationPlan) -
         pending = any(n.status != "done" for n in nodes)
         if plan.status in ("proposed", "partial") and pending and not plan.uncovered:
             actions.append("write")
-        if plan.status == "proposed":
+        if plan.status == "proposed" and plan.mode == "new":
             actions.append("edit")
         if plan.status in ("proposed", "failed") or (
             plan.status == "partial" and not any(n.status == "done" for n in nodes)
@@ -241,6 +260,7 @@ def _plan_out(ctx: TenantContext, system: ProcessSystem, plan: GenerationPlan) -
     return PlanOut(
         id=plan.id,
         status=plan.status,
+        mode=plan.mode,
         scope_code=plan.scope_code,
         sources=[_source_ref(source) for source in sources],
         model=plan.model,
@@ -282,6 +302,7 @@ def start_plan(
         source_ids=payload.source_ids,
         scope_code=payload.scope_code,
         actor_id=ctx.user.id,
+        mode=payload.mode,
     )
     return _plan_out(ctx, system, plan)
 
@@ -335,11 +356,50 @@ def discard_plan(
 
 
 @router.get(f"{_SYSTEM}/coverage", response_model=CoverageOut)
-def get_coverage(system_slug: str, ctx: TenantContext = Depends(tenant_context)) -> CoverageOut:
+def get_coverage(
+    system_slug: str,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    ctx: TenantContext = Depends(tenant_context),
+) -> CoverageOut:
     """이 체계가 근거로 삼은 표준의 요건이 어느 문서에서 이행되는지."""
     system = ctx.system_by_slug(system_slug)
     ctx.require("doc.read", system.id)
-    return coverage_svc.system_coverage(ctx.db, system)
+    return coverage_svc.system_coverage(ctx.db, system, date_from, date_to)
+
+
+@router.get(f"{_SYSTEM}/audit-pack.xlsx", response_class=Response)
+def download_audit_pack(
+    system_slug: str,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    ctx: TenantContext = Depends(tenant_context),
+) -> Response:
+    """심사 증적 묶음: 표준별로 요건 → 이행 문서 → 기록을 한 표에 담은 XLSX."""
+    system = ctx.system_by_slug(system_slug)
+    ctx.require("doc.read", system.id)
+    coverage = coverage_svc.system_coverage(ctx.db, system, date_from, date_to)
+    data = coverage_svc.audit_pack_xlsx(coverage, system.name, ctx.tenant.name)
+    name = f"audit-pack-{system.slug}-{datetime.now(UTC):%Y%m%d}.xlsx"
+    audit_svc.record(
+        ctx.db,
+        tenant_id=ctx.tenant.id,
+        actor_id=ctx.user.id,
+        action="audit_pack.export",
+        entity_type="system",
+        entity_id=system.id,
+        data={
+            "system": system.slug,
+            "date_from": str(date_from) if date_from else None,
+            "date_to": str(date_to) if date_to else None,
+            "sources": [s.source.code for s in coverage.sources],
+        },
+    )
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
 
 
 # ── 문서의 근거 ──────────────────────────────────────────────────────────────

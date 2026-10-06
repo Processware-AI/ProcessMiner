@@ -20,7 +20,7 @@ from app.models import (
     SystemBasis,
 )
 from app.pipelines import planning
-from app.services import audit
+from app.services import audit, tailoring
 from app.services.basis import applicable_requirements, sources_in_live_plans
 
 ACTIVE_RUN_STATUSES = ("queued", "running")
@@ -78,8 +78,9 @@ def start_design(
     *,
     system: ProcessSystem,
     source_ids: list[uuid.UUID],
-    scope_code: str,
+    scope_code: str | None,
     actor_id: uuid.UUID,
+    mode: str = "new",
 ) -> GenerationPlan:
     """원문 하나 또는 여럿의 적용요건으로 문서 구조를 설계한다.
 
@@ -96,7 +97,18 @@ def start_design(
                 409, "basis_not_approved", "적용요건을 승인한 뒤에 문서 구조를 설계할 수 있습니다."
             )
         sources.append(db.get(SourceDocument, source_id))
-    if db.scalar(select(ScopeCode.id).where(ScopeCode.code == scope_code)) is None:
+    if mode == "extend":
+        # 새 정책을 만들지 않으므로 영역코드가 필요 없다. 기존 문서의 번호 체계를 따른다.
+        scope_code = ""
+        if not _own_documents(db, system):
+            raise api_error(
+                409,
+                "no_documents",
+                "이 체계에 고칠 수 있는 문서가 없습니다. 새 문서 체계로 설계하세요.",
+            )
+    elif not scope_code or (
+        db.scalar(select(ScopeCode.id).where(ScopeCode.code == scope_code)) is None
+    ):
         raise api_error(422, "unknown_scope", f"등록되지 않은 영역코드입니다: {scope_code}")
     codes = [source.code for source in sources]
     if len(set(codes)) < len(codes):
@@ -119,6 +131,8 @@ def start_design(
         tenant_id=system.tenant_id,
         system_id=system.id,
         scope_code=scope_code,
+        mode=mode,
+        structure={"mode": "extend"} if mode == "extend" else {},
         status="designing",
         created_by=actor_id,
     )
@@ -145,9 +159,17 @@ def start_design(
         action="plan.design",
         entity_type="plan",
         entity_id=plan.id,
-        data={"system": system.slug, "scope_code": scope_code, "sources": codes},
+        data={"system": system.slug, "scope_code": scope_code, "sources": codes, "mode": mode},
     )
     return plan
+
+
+def _own_documents(db: Session, system: ProcessSystem) -> bool:
+    """이 체계가 고칠 수 있는 정책·절차·지침이 있는가(물려받은 문서는 고칠 수 없다)."""
+    return any(
+        e.state in ("own", "override", "added") and e.doc.doc_type in ("POL", "PRO", "WI")
+        for e in tailoring.effective_documents(db, system)
+    )
 
 
 def applicable_codes(db: Session, plan: GenerationPlan) -> set[str]:
@@ -174,6 +196,10 @@ def edit(
     """
     if plan.status != "proposed":
         raise api_error(409, "invalid_status", "문서 생성을 시작한 설계안은 고칠 수 없습니다.")
+    if plan.mode == "extend":
+        raise api_error(
+            409, "not_editable", "기존 문서에 반영하는 설계안은 아직 직접 고칠 수 없습니다."
+        )
     if has_active_run(db, plan.id):
         raise api_error(409, "run_in_progress", "작업이 끝난 뒤에 고칠 수 있습니다.")
 

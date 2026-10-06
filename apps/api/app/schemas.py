@@ -547,7 +547,9 @@ class ExclusionIn(BaseModel):
 class PlanStartIn(BaseModel):
     # 함께 설계할 근거 원문. 여럿이면 하나의 문서 체계로 통합한다.
     source_ids: list[uuid.UUID] = Field(min_length=1, max_length=8)
-    scope_code: str = Field(pattern=r"^[A-Z]{2,8}$")
+    # new: 새 문서 체계를 설계한다. extend: 이 체계의 기존 문서에 표준을 더한다.
+    mode: Literal["new", "extend"] = "new"
+    scope_code: str | None = Field(default=None, pattern=r"^[A-Z]{2,8}$")
 
 
 _PlanTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
@@ -598,6 +600,9 @@ class PlanNodeOut(BaseModel):
     # 배정된 요건을 표준별로 나눈 것: {"IEC62304": ["5.1.1-01", …]}
     by_standard: dict[str, list[str]]
     integration_note: str  # 여러 표준의 요건이 이 문서에서 어떻게 맞물리는지
+    # 기존 체계에 더하는 설계안: 개정할 기존 문서, 또는 새 문서를 붙일 기존 상위 문서
+    target: DocumentRef | None = None
+    anchor: DocumentRef | None = None
     status: str  # pending | done | failed
     document_id: uuid.UUID | None
     error: str
@@ -606,6 +611,7 @@ class PlanNodeOut(BaseModel):
 class PlanOut(BaseModel):
     id: uuid.UUID
     status: str  # designing | proposed | writing | partial | done | failed
+    mode: str  # new | extend
     scope_code: str
     sources: list[SourceRef]
     model: str | None
@@ -754,6 +760,17 @@ class CoverageDocument(BaseModel):
     sections: list[str]  # 인용한 섹션의 제목
 
 
+class CoverageRecord(BaseModel):
+    """요건을 이행한 증적: 발행한 기록."""
+
+    id: uuid.UUID
+    code: str
+    title: str
+    performed_on: date | None  # 수행일(없으면 발행일)
+    legacy: bool  # 기존 산출물에서 옮긴 기록
+    artifact_id: uuid.UUID | None
+
+
 class CoverageRequirement(BaseModel):
     id: uuid.UUID
     code: str
@@ -765,6 +782,7 @@ class CoverageRequirement(BaseModel):
     status: Literal["covered", "drafted", "gap", "excluded"]
     reason: str  # 제외 사유
     documents: list[CoverageDocument]
+    records: list[CoverageRecord]  # 이 요건의 증적(기간을 주면 그 기간의 것)
 
 
 class CoverageChapter(BaseModel):
@@ -780,12 +798,15 @@ class CoverageSource(BaseModel):
     covered: int
     drafted: int
     gaps: int
+    evidenced: int  # 기록(증적)이 하나 이상 있는 요건 수
     chapters: list[CoverageChapter]
     requirements: list[CoverageRequirement]
 
 
 class CoverageOut(BaseModel):
     sources: list[CoverageSource]
+    date_from: date | None
+    date_to: date | None
 
 
 # ── 감사 기록 ────────────────────────────────────────────────────────────────

@@ -4,7 +4,9 @@
 모든 적용요건이 문서에 배정돼야 하며, 근거가 맞지 않는 본문은 저장되지 않는다.
 """
 
+import io
 import re
+import zipfile
 
 import pytest
 
@@ -12,6 +14,7 @@ from app import llm, worker
 from app.pipelines import planning
 from app.pipelines.planning import (
     DesignOutput,
+    ExtendOutput,
     PlacementOutput,
     RequirementBrief,
     WriteTask,
@@ -162,13 +165,17 @@ def _confirmed_source(consultant, tenant, monkeypatch, data=b"%PDF-1.7 fake", co
     return source_id
 
 
-def _fake_generation(monkeypatch, structure, bad_titles=()):
+def _fake_generation(monkeypatch, structure, bad_titles=(), extension=None, prompts=None):
     """설계에는 structure 를, 문서 작성에는 근거 게이트를 통과하는 본문을 돌려준다.
 
     bad_titles 의 문서는 근거 없는 본문을 돌려준다(게이트에서 걸려야 한다).
     """
 
     def structured(*, system, user, schema, **_):
+        if prompts is not None:
+            prompts.append(user)
+        if schema is ExtendOutput:
+            return llm.LLMResult(ExtendOutput.model_validate(extension), "fake-model", 80, 40)
         if schema is DesignOutput:
             return llm.LLMResult(DesignOutput.model_validate(structure), "fake-model", 100, 100)
         if schema is PlacementOutput:
@@ -347,6 +354,51 @@ def test_design_then_write_documents_with_citations(consultant, fake_pdf, monkey
         "TMP-QMS-01-01-01-01": "draft",
     }
 
+    # 심사: 양식으로 발행한 기록이 그 양식과 그 지침이 이행하는 요건의 증적으로 이어진다.
+    tmp = next(n for n in done["nodes"] if n["doc_type"] == "TMP")
+    tmp_revision = consultant.get(f"/api/t/{tenant}/documents/{tmp['document_id']}").json()["open"]
+    table = "| 항목 | 내용 |\n|---|---|\n| 작성자 |  |\n| 내용 |  |"
+    sections = [
+        {**s, "body_md": table if s["key"] == "fields" else s["body_md"]}
+        for s in tmp_revision["sections"]
+    ]
+    consultant.patch(f"/api/t/{tenant}/revisions/{tmp_revision['id']}", json={"sections": sections})
+    upload = consultant.post(
+        f"{system}/artifacts", files={"file": ("plan.txt", "개발 계획서\n작성: 김개발".encode())}
+    ).json()
+    artifact = consultant.put(
+        f"/api/t/{tenant}/artifacts/{upload['id']}/template",
+        json={"document_id": tmp["document_id"]},
+    ).json()
+    record_path = f"/api/t/{tenant}/records/{artifact['record']['id']}"
+    consultant.patch(
+        record_path,
+        json={"performed_on": "2024-03-05", "fields": [{"name": "작성자", "value": "김개발"}]},
+    )
+    assert consultant.post(f"{record_path}/publish").status_code == 200
+
+    coverage = consultant.get(f"{system}/coverage").json()["sources"][0]
+    evidence = {r["code"]: [x["code"] for x in r["records"]] for r in coverage["requirements"]}
+    # 지침(WI)이 이행하는 요건은 그 아래 양식의 기록으로 증적이 생긴다. 절차 요건에는 없다.
+    assert evidence == {
+        "2.1.1-01": ["REC-QMS-01-01-01-01-001"],
+        "2.1.2-01": ["REC-QMS-01-01-01-01-001"],
+        "2.2-01": [],
+    }
+    assert coverage["evidenced"] == 2
+    # 기간 밖의 기록은 세지 않는다.
+    later = consultant.get(f"{system}/coverage?date_from=2024-04-01").json()
+    assert later["date_from"] == "2024-04-01" and later["sources"][0]["evidenced"] == 0
+
+    pack = consultant.get(f"{system}/audit-pack.xlsx?date_to=2024-12-31")
+    assert pack.status_code == 200
+    assert pack.headers["content-type"].startswith("application/vnd.openxmlformats")
+    with zipfile.ZipFile(io.BytesIO(pack.content)) as book:
+        assert "xl/worksheets/sheet2.xml" in book.namelist()
+        sheet = book.read("xl/worksheets/sheet2.xml").decode()
+        assert "REC-QMS-01-01-01-01-001" in sheet and "WI-QMS-01-01-01" in sheet
+        assert "IEC99999" in book.read("xl/workbook.xml").decode()
+
     # 하위 체계는 근거와 문서를 물려받는다. 문서를 제외하면 그 문서는 이행 문서에서 빠진다.
     baseline_id = consultant.get(system).json()["id"]
     new_system(consultant, tenant, slug="dev", parent_id=baseline_id)
@@ -444,6 +496,123 @@ def test_several_standards_are_integrated_into_one_system(consultant, fake_pdf, 
         ("IEC88888", "2.1.1-01"),
         ("IEC88888", "2.1.2-01"),
     }
+
+
+def test_a_new_standard_is_added_to_existing_documents(consultant, fake_pdf, monkeypatch):  # noqa: F811
+    tenant = new_tenant(consultant)
+    first, system = _approved_basis(consultant, tenant, monkeypatch)
+    _fake_generation(monkeypatch, _structure())
+    plan_id = consultant.post(
+        f"{system}/plans", json={"source_ids": [first], "scope_code": "QMS"}
+    ).json()["id"]
+    worker.process_next_run()
+    consultant.post(f"{system}/plans/{plan_id}/write", json={})
+    worker.process_next_run()
+    documents = {d["code"]: d for d in consultant.get(f"{system}/documents").json()}
+    wi_id = documents["WI-QMS-01-01-01"]["id"]
+    # 지침은 승인해 둔다(승인판이 있는 문서는 새 개정판으로 고친다). 정책·절차는 초안 그대로.
+    reviewer = add_member(consultant, tenant, "품질 책임자", ["qmr"])
+    for code in ("POL-QMS-01", "PRO-QMS-01-01", "WI-QMS-01-01-01"):
+        revision = documents[code]["open_revision_id"]
+        consultant.post(f"/api/t/{tenant}/revisions/{revision}/submit")
+        assert (
+            reviewer.post(f"/api/t/{tenant}/revisions/{revision}/approve", json={}).status_code
+            == 200
+        )
+
+    # 새 표준을 근거로 더한다. 기존 문서가 있는 체계에서는 새로 설계하지 않고 기존 문서에 반영한다.
+    second = _confirmed_source(consultant, tenant, monkeypatch, b"%PDF-1.7 second", "iec88888")
+    consultant.post(f"{system}/basis", json={"source_id": second})
+    consultant.post(f"{system}/basis/{second}/approve")
+    extension = {
+        "updates": [
+            {
+                "document": "d2",
+                "requirements": OTHER[:2],
+                "integration_note": "d1 의 흐름에 보안 활동을 더한다",
+            },
+            {"document": "d9", "requirements": [], "integration_note": ""},  # 없는 문서는 버린다
+        ],
+        "additions": [
+            {
+                "doc_type": "WI",
+                "parent": "d1",
+                "title": "보안 검증 지침",
+                "purpose": "보안 검증 방법",
+                "requirements": [OTHER[2]],
+                "integration_note": "",
+                "templates": ["보안 검증 기록"],
+            },
+            # 정책 아래에 지침을 붙일 수는 없다(버린다).
+            {
+                "doc_type": "WI",
+                "parent": "d0",
+                "title": "잘못된 지침",
+                "purpose": "",
+                "requirements": [],
+                "integration_note": "",
+                "templates": [],
+            },
+        ],
+    }
+    prompts: list[str] = []
+    _fake_generation(monkeypatch, _structure(), extension=extension, prompts=prompts)
+    start = {"source_ids": [second], "mode": "extend"}
+    plan = consultant.post(f"{system}/plans", json=start).json()
+    assert plan["mode"] == "extend" and plan["scope_code"] == ""
+    worker.process_next_run()
+    # 모델에는 기존 문서를 키로 보여주고, 각 문서가 이미 무엇을 다루는지 함께 준다.
+    assert "d2 [WI] WI-QMS-01-01-01 개발 계획 수립 지침 — 다루는 요건: 요약" in prompts[0]
+
+    plan = next(p for p in consultant.get(f"{system}/plans").json() if p["id"] == plan["id"])
+    assert plan["status"] == "proposed" and plan["uncovered"] == []
+    assert plan["actions"] == ["write", "discard"]  # 기존 문서 반영안은 아직 직접 고칠 수 없다
+    assert [
+        (n["path"], n["doc_type"], n["title"], (n["target"] or n["anchor"] or {}).get("code"))
+        for n in plan["nodes"]
+    ] == [
+        ("u0", "WI", "개발 계획 수립 지침", "WI-QMS-01-01-01"),
+        ("a0", "WI", "보안 검증 지침", "PRO-QMS-01-01"),
+        ("a0.t0", "TMP", "보안 검증 기록", None),
+    ]
+
+    # 모델이 문서를 키로 가리키면 사람이 읽을 수 있게 제목으로 바꾼다.
+    assert plan["nodes"][0]["integration_note"] == "‘개발 계획 절차’ 의 흐름에 보안 활동을 더한다"
+
+    consultant.post(f"{system}/plans/{plan['id']}/write", json={})
+    worker.process_next_run()
+    plan = next(p for p in consultant.get(f"{system}/plans").json() if p["id"] == plan["id"])
+    assert plan["status"] == "done", plan["nodes"]
+    # 개정 지시에는 지금 본문과, 새로 반영할 요건이 들어 있다.
+    revise = next(p for p in prompts if "# 개정 지시" in p)
+    assert "IEC88888 2.1.1-01, IEC88888 2.1.2-01" in revise and "# 지금 본문" in revise
+
+    # 승인판이 있던 지침은 새 개정판(주요 개정)으로 고쳐지고, 옛 근거와 새 근거를 함께 댄다.
+    detail = consultant.get(f"/api/t/{tenant}/documents/{wi_id}").json()
+    assert detail["approved"]["version"] == "1.0" and detail["open"]["version"] == "2.0"
+    assert detail["open"]["change_summary"] == "IEC88888 적용요건 반영"
+    links = consultant.get(f"/api/t/{tenant}/revisions/{detail['open']['id']}/requirements").json()
+    cited = {(x["source"]["code"], x["requirement"]["code"]) for x in links}
+    assert cited == {
+        ("IEC99999", "2.1.1-01"),
+        ("IEC99999", "2.1.2-01"),
+        ("IEC88888", "2.1.1-01"),
+        ("IEC88888", "2.1.2-01"),
+    }
+    # 새 지침은 기존 절차 아래에 같은 번호 체계로 생긴다.
+    codes = [d["code"] for d in consultant.get(f"{system}/documents").json()]
+    assert "WI-QMS-01-01-02" in codes and "TMP-QMS-01-01-02-01" in codes
+    coverage = consultant.get(f"{system}/coverage").json()["sources"]
+    new_standard = next(s for s in coverage if s["source"]["code"] == "IEC88888")
+    assert new_standard["gaps"] == 0 and new_standard["drafted"] == 3
+
+    # 기존 문서가 없는 체계에서는 반영할 수 없다.
+    new_system(consultant, tenant, slug="empty")
+    empty = f"/api/t/{tenant}/systems/empty"
+    consultant.post(f"{empty}/basis", json={"source_id": second})
+    consultant.post(f"{empty}/basis/{second}/approve")
+    refused = consultant.post(f"{empty}/plans", json=start)
+    assert refused.json()["detail"]["code"] == "no_documents"
 
 
 def test_ungrounded_documents_are_not_saved_and_can_be_retried(consultant, fake_pdf, monkeypatch):  # noqa: F811

@@ -1,9 +1,18 @@
 "use client";
 
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, DownloadIcon, SearchIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ClipboardCheckIcon,
+  DownloadIcon,
+  FileSpreadsheetIcon,
+  PrinterIcon,
+  SearchIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { EmptyState, ErrorState, LinkButton, TypeBadge } from "@/components/bits";
 import { Button } from "@/components/ui/button";
@@ -56,8 +65,16 @@ const countsOf = (rows: CoverageRequirement[]) =>
 export default function CoveragePage() {
   const { tenant, system } = useParams<{ tenant: string; system: string }>();
   const systemQuery = useSystem(tenant, system);
-  const coverage = useCoverage(tenant, system);
+  const [period, setPeriod] = useState<{ from?: string; to?: string }>({});
+  const coverage = useCoverage(tenant, system, period);
   const [picked, setPicked] = useState<string | null>(null);
+  const packUrl = useMemo(() => {
+    const query = new URLSearchParams();
+    if (period.from) query.set("date_from", period.from);
+    if (period.to) query.set("date_to", period.to);
+    const suffix = query.size > 0 ? `?${query}` : "";
+    return `/api/t/${encodeURIComponent(tenant)}/systems/${encodeURIComponent(system)}/audit-pack.xlsx${suffix}`;
+  }, [tenant, system, period]);
 
   const sources = coverage.data?.sources ?? [];
   const current = sources.find((s) => s.source.id === picked) ?? sources[0];
@@ -72,12 +89,53 @@ export default function CoveragePage() {
           <ChevronLeftIcon className="size-4" />
           {systemQuery.data?.name ?? "체계"}
         </Link>
-        <h1 className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">표준 커버리지</h1>
-        <p className="mt-1 text-sm text-muted-foreground text-pretty">
-          이 체계가 근거로 삼은 표준의 요건이 어느 문서에서 이행되는지 보여줍니다. 문서의 섹션이
-          요건을 근거로 인용한 것만 셉니다. 승인된 문서가 인용해야 “이행”이고, 승인 전 문서만
-          있으면 “초안”입니다.
+        <h1 className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">
+          표준 커버리지와 심사 증적
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground text-pretty print:hidden">
+          이 체계가 근거로 삼은 표준의 요건이 어느 문서에서 이행되고, 어떤 기록으로 증명되는지
+          보여줍니다. 문서의 섹션이 요건을 근거로 인용한 것만 셉니다. 승인된 문서가 인용해야
+          “이행”이고, 승인 전 문서만 있으면 “초안”입니다. 기록은 그 요건을 이행하는 지침의 양식으로
+          발행한 것입니다.
         </p>
+        <p className="mt-1 hidden text-sm print:block">
+          {systemQuery.data?.name} · 기록 기간 {period.from || "처음"} ~ {period.to || "지금"}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-2 rounded-xl border border-border bg-card px-4 py-3 print:hidden">
+        <label className="grid gap-1 text-xs text-muted-foreground">
+          기록 기간 시작
+          <Input
+            type="date"
+            value={period.from ?? ""}
+            onChange={(event) => setPeriod((p) => ({ ...p, from: event.target.value || undefined }))}
+            className="w-40"
+          />
+        </label>
+        <label className="grid gap-1 text-xs text-muted-foreground">
+          끝
+          <Input
+            type="date"
+            value={period.to ?? ""}
+            onChange={(event) => setPeriod((p) => ({ ...p, to: event.target.value || undefined }))}
+            className="w-40"
+          />
+        </label>
+        {(period.from || period.to) && (
+          <Button variant="ghost" size="sm" onClick={() => setPeriod({})}>
+            기간 지우기
+          </Button>
+        )}
+        <span className="flex-1" />
+        <Button variant="outline" size="sm" onClick={() => window.print()}>
+          <PrinterIcon />
+          인쇄 · PDF
+        </Button>
+        <Button size="sm" nativeButton={false} render={<a href={packUrl} download />}>
+          <FileSpreadsheetIcon />
+          증적 묶음 XLSX
+        </Button>
       </div>
 
       {coverage.isPending && <Skeleton className="h-40" />}
@@ -168,6 +226,7 @@ function SourceCard({
           <span className="block text-xs text-muted-foreground">
             이행 {source.covered} / 적용 {applicable}
           </span>
+          <span className="block text-xs text-muted-foreground">기록 있음 {source.evidenced}</span>
         </p>
       </div>
       <Bar counts={counts} className="mt-3" />
@@ -200,6 +259,7 @@ function SourceDetail({ tenant, system, source }: { tenant: string; system: stri
           (filter === "all" || r.status === filter) &&
           (!needle ||
             r.code.toLowerCase().includes(needle) ||
+            r.records.some((x) => x.code.toLowerCase().includes(needle)) ||
             r.summary.toLowerCase().includes(needle) ||
             r.documents.some(
               (d) => d.code.toLowerCase().includes(needle) || d.title.toLowerCase().includes(needle),
@@ -207,6 +267,13 @@ function SourceDetail({ tenant, system, source }: { tenant: string; system: stri
       ),
     [source.requirements, filter, needle],
   );
+
+  // 인쇄할 때는 접어 둔 장도 모두 펼친다.
+  useEffect(() => {
+    const expand = () => setCollapsed(new Set());
+    window.addEventListener("beforeprint", expand);
+    return () => window.removeEventListener("beforeprint", expand);
+  }, []);
 
   function toggle(key: string) {
     setCollapsed((previous) => {
@@ -218,7 +285,7 @@ function SourceDetail({ tenant, system, source }: { tenant: string; system: stri
 
   return (
     <section className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 print:hidden">
         <div className="flex flex-wrap rounded-lg bg-muted p-0.5" role="group" aria-label="상태로 걸러 보기">
           {(["all", ...ORDER] as const).map((value) => (
             <button
@@ -254,7 +321,7 @@ function SourceDetail({ tenant, system, source }: { tenant: string; system: stri
         <Button
           variant="outline"
           size="sm"
-          className="ml-auto"
+          className="ml-auto print:hidden"
           onClick={() => downloadCsv(source, system)}
         >
           <DownloadIcon />
@@ -370,6 +437,29 @@ function RequirementRow({
             </li>
           ))}
         </ul>
+        {requirement.records.length > 0 && (
+          <ul className="mt-1.5 space-y-1 border-t border-dashed border-border pt-1.5">
+            {requirement.records.map((record) => (
+              <li key={record.id}>
+                <Link
+                  href={record.artifact_id ? routes.artifact(tenant, system, record.artifact_id) : "#"}
+                  className="group flex items-center gap-2"
+                  title={record.legacy ? "기존 산출물에서 옮긴 기록" : undefined}
+                >
+                  <ClipboardCheckIcon className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <span className="shrink-0 font-mono text-muted-foreground">{record.code}</span>
+                  <span className="min-w-0 flex-1 truncate group-hover:underline">{record.title}</span>
+                  {record.performed_on && (
+                    <span className="shrink-0 text-muted-foreground">{record.performed_on}</span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        {requirement.status === "covered" && requirement.records.length === 0 && (
+          <p className="mt-1 text-muted-foreground">이 기간의 기록 없음</p>
+        )}
       </div>
     </li>
   );
@@ -380,7 +470,7 @@ function downloadCsv(source: CoverageSource, system: string) {
   const cell = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`;
   const titles = new Map(source.chapters.map((chapter) => [chapter.key, chapter.title]));
   const lines = [
-    ["표준", "장", "조항", "요건", "의무", "요건 요약", "상태", "이행 문서", "제외 사유"],
+    ["표준", "장", "조항", "요건", "의무", "요건 요약", "상태", "이행 문서", "기록", "제외 사유"],
     ...source.requirements.map((r) => [
       source.source.code,
       `${r.chapter} ${titles.get(r.chapter) ?? ""}`.trim(),
@@ -392,6 +482,7 @@ function downloadCsv(source: CoverageSource, system: string) {
       r.documents
         .map((d) => `${d.code} ${d.title} (${DOCUMENT_STATE[d.state]}: ${d.sections.join(", ")})`)
         .join("\n"),
+      r.records.map((x) => `${x.code} ${x.title}`).join("\n"),
       r.reason,
     ]),
   ];

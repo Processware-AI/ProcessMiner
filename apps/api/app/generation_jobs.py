@@ -14,15 +14,21 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.domain import revisions as rev
+from app.errors import api_error
 from app.llm import LLMError
 from app.models import (
     DocTypeDef,
+    Document,
     DocumentRequirement,
+    DocumentRevision,
     GenerationPlan,
     ProcessSystem,
     Requirement,
     Run,
     RunEvent,
+    SourceClause,
+    SourceDocument,
 )
 from app.pipelines import planning
 from app.pipelines.planning import GroundingError, PlanNode, RequirementBrief, WriteTask
@@ -30,6 +36,7 @@ from app.schemas import DocumentIn
 from app.services import basis as basis_service
 from app.services import documents as doc_service
 from app.services import plans as plan_service
+from app.services import tailoring
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +53,24 @@ def _finish(db: Session, run: Run, status: str, error: str = "") -> None:
     run.finished_at = datetime.now(UTC)
 
 
+def _brief(
+    requirement: Requirement, clause: SourceClause, source: SourceDocument
+) -> RequirementBrief:
+    return RequirementBrief(
+        code=planning.qualified_code(source.code, requirement.code),
+        clause_number=clause.number,
+        clause_title=clause.title,
+        obligation=requirement.obligation,
+        category=requirement.category,
+        summary=requirement.summary,
+        quote=requirement.quote,
+        applicability=requirement.applicability,
+        evidence=requirement.evidence,
+        standard=source.code,
+        standard_title=source.title,
+    )
+
+
 def _applicable(
     db: Session, plan: GenerationPlan
 ) -> tuple[dict[str, RequirementBrief], dict[str, Requirement]]:
@@ -56,22 +81,67 @@ def _applicable(
         for requirement, clause in basis_service.applicable_requirements(
             db, plan.system_id, source.id
         ):
-            code = planning.qualified_code(source.code, requirement.code)
-            briefs[code] = RequirementBrief(
-                code=code,
-                clause_number=clause.number,
-                clause_title=clause.title,
-                obligation=requirement.obligation,
-                category=requirement.category,
-                summary=requirement.summary,
-                quote=requirement.quote,
-                applicability=requirement.applicability,
-                evidence=requirement.evidence,
-                standard=source.code,
-                standard_title=source.title,
-            )
-            rows[code] = requirement
+            brief = _brief(requirement, clause, source)
+            briefs[brief.code] = brief
+            rows[brief.code] = requirement
     return briefs, rows
+
+
+# ── 기존 문서 ────────────────────────────────────────────────────────────────
+
+
+def _working_revision(db: Session, document_id) -> DocumentRevision | None:
+    """개정의 바탕이 되는 판: 진행 중인 판이 있으면 그것, 없으면 승인판."""
+    return doc_service.open_revision(db, document_id) or doc_service.approved_revision(
+        db, document_id
+    )
+
+
+def _citations(
+    db: Session, revision_id
+) -> list[tuple[str, Requirement, SourceClause, SourceDocument]]:
+    return list(
+        db.execute(
+            select(DocumentRequirement.section_key, Requirement, SourceClause, SourceDocument)
+            .join(Requirement, Requirement.id == DocumentRequirement.requirement_id)
+            .join(SourceClause, SourceClause.id == Requirement.clause_id)
+            .join(SourceDocument, SourceDocument.id == Requirement.source_id)
+            .where(DocumentRequirement.revision_id == revision_id)
+            .order_by(SourceClause.position, Requirement.position)
+        ).all()
+    )
+
+
+def _outline(db: Session, system: ProcessSystem) -> list[planning.ExistingDocument]:
+    """이 체계가 가진 정책·절차·지침. 상위 체계에서 물려받은 문서는 여기서 고칠 수 없으므로 뺀다."""
+    entries = {
+        e.doc.id: e
+        for e in tailoring.effective_documents(db, system)
+        if e.state in ("own", "override", "added")
+    }
+    depth = {"POL": 0, "PRO": 1, "WI": 2}
+    outline = []
+    for index, entry in enumerate(
+        e for e in sorted(entries.values(), key=lambda e: e.doc.code) if e.doc.doc_type in depth
+    ):
+        revision = _working_revision(db, entry.doc.id)
+        covers = (
+            list(dict.fromkeys(r.summary for _, r, _, _ in _citations(db, revision.id)))
+            if revision
+            else []
+        )
+        outline.append(
+            planning.ExistingDocument(
+                key=f"d{index}",
+                document_id=str(entry.doc.id),
+                code=entry.doc.code,
+                doc_type=entry.doc.doc_type,
+                title=entry.doc.title,
+                depth=depth[entry.doc.doc_type],
+                covers=covers,
+            )
+        )
+    return outline
 
 
 # ── 구조 설계 ────────────────────────────────────────────────────────────────
@@ -84,8 +154,22 @@ def run_design(db: Session, run: Run) -> None:
     _log(db, run, f"{', '.join(standards)} 적용요건 {len(briefs)}건으로 문서 구조를 설계합니다")
     db.commit()
 
+    extend = plan.mode == "extend"
     try:
-        result = planning.design(list(briefs.values()))
+        if extend:
+            existing = _outline(db, db.get(ProcessSystem, plan.system_id))
+            if not existing:
+                plan.status = "failed"
+                _finish(
+                    db, run, "failed", "이 체계에 고칠 수 있는 문서가 없습니다. 새로 설계하세요."
+                )
+                db.commit()
+                return
+            _log(db, run, f"기존 문서 {len(existing)}건에 새 요건을 반영할 곳을 찾습니다")
+            db.commit()
+            result = planning.design_extension(existing, list(briefs.values()))
+        else:
+            result = planning.design(list(briefs.values()))
     except LLMError as exc:
         plan.status = "failed"
         _finish(db, run, "failed", str(exc))
@@ -106,12 +190,16 @@ def run_design(db: Session, run: Run) -> None:
     run.progress = {"input_tokens": result.input_tokens, "output_tokens": result.output_tokens}
     counts = {t: sum(n.doc_type == t for n in nodes) for t in _LEVELS}
     shared = sum(len(planning.by_standard(n.requirements)) > 1 for n in nodes)
-    _log(
-        db,
-        run,
-        f"설계 완료: 정책 {counts['POL']}, 절차 {counts['PRO']}, 지침 {counts['WI']}, "
-        f"템플릿 {counts['TMP']}",
-    )
+    if extend:
+        updates = sum(n.target is not None for n in nodes)
+        _log(db, run, f"설계 완료: 기존 문서 개정 {updates}건, 새 문서 {len(nodes) - updates}건")
+    else:
+        _log(
+            db,
+            run,
+            f"설계 완료: 정책 {counts['POL']}, 절차 {counts['PRO']}, 지침 {counts['WI']}, "
+            f"템플릿 {counts['TMP']}",
+        )
     if len(standards) > 1:
         _log(db, run, f"여러 표준의 요건을 함께 이행하는 문서 {shared}건")
     if result.uncovered:
@@ -129,7 +217,41 @@ def _task(
     by_path: dict[str, PlanNode],
     briefs: dict[str, RequirementBrief],
     schemas: dict[str, list[dict[str, Any]]],
+    db: Session | None = None,
 ) -> WriteTask:
+    if node.target is not None:
+        # 기존 문서 개정: 지금 본문과, 이미 근거로 대던 요건을 함께 준다.
+        doc = db.get(Document, node.target)
+        revision = _working_revision(db, doc.id)
+        kept = []
+        for _, requirement, clause, source in _citations(db, revision.id) if revision else []:
+            brief = _brief(requirement, clause, source)
+            briefs.setdefault(brief.code, brief)
+            kept.append(brief.code)
+        assigned_codes = list(dict.fromkeys([*kept, *node.requirements]))
+        chosen = [briefs[c] for c in assigned_codes if c in briefs]
+        return WriteTask(
+            node=node,
+            section_schema=schemas[node.doc_type],
+            assigned=chosen,
+            allowed=chosen,
+            ancestors=[a.title for a in doc_service.ancestors(db, doc)],
+            children=[c.title for c in doc_service.list_children(db, doc.id)],
+            current=revision.sections if revision else [],
+            new_codes=node.requirements,
+        )
+    if node.anchor is not None:
+        # 기존 문서 아래에 새로 붙이는 문서.
+        anchor = db.get(Document, node.anchor)
+        own = [*node.requirements]
+        return WriteTask(
+            node=node,
+            section_schema=schemas[node.doc_type],
+            assigned=[briefs[c] for c in own if c in briefs],
+            allowed=[briefs[c] for c in own if c in briefs],
+            ancestors=[*(a.title for a in doc_service.ancestors(db, anchor)), anchor.title],
+            children=[n.title for n in nodes if n.parent == node.path],
+        )
     if node.doc_type == "TMP":
         # 템플릿은 상위 지침의 요건이 요구하는 기록을 담는다.
         assigned: list[str] = []
@@ -171,6 +293,16 @@ def _persist(
 ) -> str:
     """쓴 본문을 초안 문서로 저장하고 섹션별 근거 링크를 남긴다. 문서 id 를 돌려준다."""
     author_id = plan.accepted_by or plan.created_by
+    if node.target is not None:
+        return _persist_revision(
+            db,
+            plan=plan,
+            standards=standards,
+            node=node,
+            written=written,
+            requirement_rows=requirement_rows,
+            author_id=author_id,
+        )
     document = doc_service.create_document(
         db,
         system=system,
@@ -204,6 +336,73 @@ def _persist(
             )
     db.flush()
     return str(document.id)
+
+
+def _persist_revision(
+    db: Session,
+    *,
+    plan: GenerationPlan,
+    standards: list[str],
+    node: PlanNode,
+    written: planning.WriteResult,
+    requirement_rows: dict[str, Requirement],
+    author_id,
+) -> str:
+    """기존 문서를 개정한다.
+
+    승인판만 있으면 새 개정판(주요 개정)을 만들고, 초안이 있으면 그 초안을 고친다.
+    """
+    doc = db.get(Document, node.target)
+    summary = f"{', '.join(standards)} 적용요건 반영"
+    revision = doc_service.open_revision(db, doc.id)
+    if revision is None:
+        revision = doc_service.start_revision(
+            db, doc=doc, change_kind="major", change_summary=summary, actor_id=author_id
+        )
+    elif revision.status != rev.DRAFT:
+        raise api_error(
+            409, "in_review", "검토 중인 문서라 고칠 수 없습니다. 검토를 마친 뒤 다시 생성하세요."
+        )
+    else:
+        revision.change_summary = "; ".join(x for x in (revision.change_summary, summary) if x)
+    revision.sections = written.sections
+    revision.structured = {**revision.structured, "plan_id": str(plan.id)}
+    revision.generated_by = written.model
+    # 이미 근거로 대던 요건(다른 표준의 것일 수 있다). 새 개정판은 승인판의 링크를 물려받았다.
+    known = {
+        planning.qualified_code(source.code, requirement.code): requirement
+        for _, requirement, _, source in _citations(db, revision.id)
+    }
+    for link in db.scalars(
+        select(DocumentRequirement).where(DocumentRequirement.revision_id == revision.id)
+    ):
+        db.delete(link)
+    db.flush()
+    for section_key, codes in written.citations.items():
+        for code in codes:
+            requirement = requirement_rows.get(code) or known.get(code)
+            if requirement is None:
+                requirement = _requirement_by_code(db, code)
+            db.add(
+                DocumentRequirement(
+                    revision_id=revision.id,
+                    section_key=section_key,
+                    requirement_id=requirement.id,
+                    tenant_id=plan.tenant_id,
+                    document_id=doc.id,
+                )
+            )
+    db.flush()
+    return str(doc.id)
+
+
+def _requirement_by_code(db: Session, code: str) -> Requirement:
+    standard, _, bare = code.rpartition(" ")
+    return db.scalar(
+        select(Requirement)
+        .join(SourceDocument, SourceDocument.id == Requirement.source_id)
+        .where(SourceDocument.code == standard, Requirement.code == bare)
+    )
 
 
 def run_write(db: Session, run: Run) -> None:
@@ -253,7 +452,7 @@ def run_write(db: Session, run: Run) -> None:
                 save_state()
 
             futures = {
-                pool.submit(planning.write, _task(n, nodes, by_path, briefs, schemas)): n
+                pool.submit(planning.write, _task(n, nodes, by_path, briefs, schemas, db)): n
                 for n in ready
             }
             for future in as_completed(futures):
@@ -268,7 +467,8 @@ def run_write(db: Session, run: Run) -> None:
                             standards=standards,
                             node=node,
                             parent_document_id=(
-                                results[node.parent]["document_id"] if node.parent else None
+                                node.anchor
+                                or (results[node.parent]["document_id"] if node.parent else None)
                             ),
                             written=written,
                             requirement_rows=requirement_rows,

@@ -3527,6 +3527,40 @@
               "type": "string",
               "title": "Tenant Slug"
             }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
           }
         ],
         "responses": {
@@ -3539,6 +3573,85 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/systems/{system_slug}/audit-pack.xlsx": {
+      "get": {
+        "tags": [
+          "build"
+        ],
+        "summary": "Download Audit Pack",
+        "description": "심사 증적 묶음: 표준별로 요건 → 이행 문서 → 기록을 한 표에 담은 XLSX.",
+        "operationId": "download_audit_pack_api_t__tenant_slug__systems__system_slug__audit_pack_xlsx_get",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -5191,13 +5304,95 @@
             },
             "type": "array",
             "title": "Sources"
+          },
+          "date_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date From"
+          },
+          "date_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date To"
           }
         },
         "type": "object",
         "required": [
-          "sources"
+          "sources",
+          "date_from",
+          "date_to"
         ],
         "title": "CoverageOut"
+      },
+      "CoverageRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "performed_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performed On"
+          },
+          "legacy": {
+            "type": "boolean",
+            "title": "Legacy"
+          },
+          "artifact_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "title",
+          "performed_on",
+          "legacy",
+          "artifact_id"
+        ],
+        "title": "CoverageRecord",
+        "description": "요건을 이행한 증적: 발행한 기록."
       },
       "CoverageRequirement": {
         "properties": {
@@ -5246,6 +5441,13 @@
             },
             "type": "array",
             "title": "Documents"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageRecord"
+            },
+            "type": "array",
+            "title": "Records"
           }
         },
         "type": "object",
@@ -5258,7 +5460,8 @@
           "summary",
           "status",
           "reason",
-          "documents"
+          "documents",
+          "records"
         ],
         "title": "CoverageRequirement"
       },
@@ -5299,6 +5502,10 @@
             "type": "integer",
             "title": "Gaps"
           },
+          "evidenced": {
+            "type": "integer",
+            "title": "Evidenced"
+          },
           "chapters": {
             "items": {
               "$ref": "#/components/schemas/CoverageChapter"
@@ -5323,6 +5530,7 @@
           "covered",
           "drafted",
           "gaps",
+          "evidenced",
           "chapters",
           "requirements"
         ],
@@ -6302,6 +6510,26 @@
             "type": "string",
             "title": "Integration Note"
           },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "anchor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "status": {
             "type": "string",
             "title": "Status"
@@ -6349,6 +6577,10 @@
           "status": {
             "type": "string",
             "title": "Status"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
           },
           "scope_code": {
             "type": "string",
@@ -6436,6 +6668,7 @@
         "required": [
           "id",
           "status",
+          "mode",
           "scope_code",
           "sources",
           "model",
@@ -6542,16 +6775,31 @@
             "minItems": 1,
             "title": "Source Ids"
           },
-          "scope_code": {
+          "mode": {
             "type": "string",
-            "pattern": "^[A-Z]{2,8}$",
+            "enum": [
+              "new",
+              "extend"
+            ],
+            "title": "Mode",
+            "default": "new"
+          },
+          "scope_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Z]{2,8}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Scope Code"
           }
         },
         "type": "object",
         "required": [
-          "source_ids",
-          "scope_code"
+          "source_ids"
         ],
         "title": "PlanStartIn"
       },

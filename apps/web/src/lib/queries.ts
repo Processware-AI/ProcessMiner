@@ -213,13 +213,23 @@ export function useRecordTemplates(tenant: string, system: string) {
   });
 }
 
-export function useCoverage(tenant: string, system: string) {
+export function useCoverage(
+  tenant: string,
+  system: string,
+  period: { from?: string; to?: string } = {},
+) {
   return useQuery({
-    queryKey: keys.coverage(tenant, system),
+    queryKey: [...keys.coverage(tenant, system), period.from ?? "", period.to ?? ""],
     queryFn: () =>
       unwrap(
         api.GET("/api/t/{tenant_slug}/systems/{system_slug}/coverage", {
-          params: { path: { tenant_slug: tenant, system_slug: system } },
+          params: {
+            path: { tenant_slug: tenant, system_slug: system },
+            query: {
+              ...(period.from ? { date_from: period.from } : {}),
+              ...(period.to ? { date_to: period.to } : {}),
+            },
+          },
         }),
       ),
   });

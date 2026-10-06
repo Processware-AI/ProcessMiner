@@ -6,6 +6,7 @@
 저장하지 않는다(근거 게이트).
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -132,6 +133,10 @@ class PlanNode:
     requirements: list[str]
     parent: str | None
     note: str = ""  # 여러 표준의 요건이 이 문서에서 어떻게 맞물리는지
+    # 기존 체계에 표준을 더할 때: 개정할 기존 문서(target),
+    # 또는 새 문서를 붙일 기존 상위 문서(anchor)
+    target: str | None = None
+    anchor: str | None = None
 
     @property
     def depth(self) -> int:
@@ -170,6 +175,8 @@ def _requirement_listing(requirements: list[RequirementBrief]) -> str:
 
 def flatten(structure: dict[str, Any]) -> list[PlanNode]:
     """설계안을 상위 문서가 먼저 오는 순서로 편다."""
+    if structure.get("mode") == "extend":
+        return _flatten_extend(structure)
     nodes: list[PlanNode] = []
     for pi, policy in enumerate(structure.get("policies", [])):
         p = f"p{pi}"
@@ -207,6 +214,41 @@ def flatten(structure: dict[str, Any]) -> list[PlanNode]:
     return nodes
 
 
+def _flatten_extend(structure: dict[str, Any]) -> list[PlanNode]:
+    """기존 체계에 표준을 더하는 설계안: 개정할 기존 문서(u…)와 새 문서(a…, 그 양식 a….t…)."""
+    nodes: list[PlanNode] = []
+    for i, update in enumerate(structure.get("updates", [])):
+        nodes.append(
+            PlanNode(
+                f"u{i}",
+                update["doc_type"],
+                update["title"],
+                "",
+                update["requirements"],
+                None,
+                update.get("integration_note", ""),
+                target=update["document_id"],
+            )
+        )
+    for i, addition in enumerate(structure.get("additions", [])):
+        path = f"a{i}"
+        nodes.append(
+            PlanNode(
+                path,
+                addition["doc_type"],
+                addition["title"],
+                addition.get("purpose", ""),
+                addition["requirements"],
+                None,
+                addition.get("integration_note", ""),
+                anchor=addition["parent_document_id"],
+            )
+        )
+        for t, template in enumerate(addition.get("templates", [])):
+            nodes.append(PlanNode(f"{path}.t{t}", "TMP", template, "", [], path))
+    return nodes
+
+
 def normalize(structure: dict[str, Any], valid_codes: set[str]) -> tuple[dict[str, Any], list[str]]:
     """설계안을 정리한다: 없는 코드와 중복 배정을 지우고, 배정되지 않은 요건을 찾는다."""
     seen: set[str] = set()
@@ -221,6 +263,20 @@ def normalize(structure: dict[str, Any], valid_codes: set[str]) -> tuple[dict[st
                 seen.add(code)
                 kept.append(code)
         return kept
+
+    if structure.get("mode") == "extend":
+        # 새 문서의 배정을 먼저 살리고(새로 만들 이유), 나머지를 기존 문서에 둔다.
+        for addition in structure.get("additions", []):
+            addition["requirements"] = clean(addition.get("requirements", []))
+            addition["templates"] = [t.strip() for t in addition.get("templates", []) if t.strip()][
+                :3
+            ]
+        for update in structure.get("updates", []):
+            update["requirements"] = clean(update.get("requirements", []))
+        # 아무 요건도 받지 않은 문서는 손댈 이유가 없다.
+        structure["updates"] = [u for u in structure.get("updates", []) if u["requirements"]]
+        structure["additions"] = [a for a in structure.get("additions", []) if a["requirements"]]
+        return structure, sorted(valid_codes - seen)
 
     # 가장 구체적인 문서의 배정을 살리기 위해 아래 단계부터 정리한다.
     for policy in structure.get("policies", []):
@@ -301,6 +357,140 @@ def design(requirements: list[RequirementBrief]) -> DesignResult:
     return DesignResult(structure, uncovered, first.model, tokens_in, tokens_out)
 
 
+# ── 기존 체계에 표준 더하기 ──────────────────────────────────────────────────
+
+EXTEND_PROMPT = """\
+당신은 조직의 프로세스 문서 체계를 관리하는 품질·프로세스 컨설턴트입니다.
+조직은 이미 운영 중인 문서 체계(정책·절차·지침)가 있고, 여기에 새 표준을 더해 함께 이행하려고
+합니다. 기존 문서 목록과 새 표준의 적용요건이 주어집니다. 새 요건을 어디에 반영할지 정하세요.
+결과는 사람이 검토한 뒤, 기존 문서를 개정하고 필요한 문서만 새로 만드는 데 쓰입니다.
+
+규칙
+1. 새 요건은 될 수 있으면 기존 문서에 반영합니다. 그 요건이 다루는 활동을 이미 다루는 문서가
+   있으면 그 문서를 개정합니다(updates). 같은 활동에 대한 문서를 따로 만들지 않습니다.
+2. 기존 문서 어디에도 해당 활동이 없을 때만 새 문서를 만듭니다(additions). 새 문서는 기존
+   정책 아래의 절차(PRO), 또는 기존 절차 아래의 지침(WI)입니다. parent 에는 기존 문서 목록의
+   키(예: d3)를 적습니다. 새 지침에는 필요한 기록 양식(templates)을 0~3개 둡니다.
+3. 요건은 그것을 실제로 이행하는 가장 구체적인 문서에 둡니다. 방침 수준은 정책, 흐름·책임은 절차,
+   수행 방법은 지침입니다. 같은 요건을 두 문서에 두지 않습니다. 모든 새 요건을 빠짐없이 배정합니다.
+4. 요건 코드는 입력에 있는 것만 그대로 적습니다("표준약칭 번호").
+5. integration_note 에는 그 문서에서 새 표준의 요건이 기존 내용과 어떻게 맞물리는지 한두 문장으로
+   적습니다(무엇이 이미 되어 있고, 무엇을 더해야 하는지). 다른 문서를 가리킬 때는 키 대신
+   문서 제목을 씁니다.
+6. 새 문서의 제목은 한국어로, 유형이 드러나게 짓고 purpose 는 다루는 범위를 한 문장으로 적습니다.
+"""
+
+
+class ExtendUpdate(BaseModel):
+    document: str = Field(description="기존 문서의 키. 예: d3")
+    requirements: list[str]
+    integration_note: str
+
+
+class ExtendAddition(BaseModel):
+    doc_type: str = Field(description="PRO 또는 WI")
+    parent: str = Field(description="붙일 기존 문서의 키. PRO 는 정책, WI 는 절차")
+    title: str
+    purpose: str
+    requirements: list[str]
+    integration_note: str
+    templates: list[str]
+
+
+class ExtendOutput(BaseModel):
+    updates: list[ExtendUpdate]
+    additions: list[ExtendAddition]
+
+
+@dataclass
+class ExistingDocument:
+    """기존 체계의 문서 하나. 모델에는 키(d0, d1 …)로 보여준다."""
+
+    key: str
+    document_id: str
+    code: str
+    doc_type: str
+    title: str
+    depth: int
+    covers: list[str]  # 이미 이행하는 요건의 요약(무슨 일을 다루는 문서인지 알 수 있게)
+
+
+_CHILD_OF = {"PRO": "POL", "WI": "PRO"}
+
+
+def design_extension(
+    existing: list[ExistingDocument], requirements: list[RequirementBrief]
+) -> DesignResult:
+    """새 표준의 요건을 기존 문서 개정과 새 문서로 나눈다."""
+    outline = []
+    for doc in existing:
+        covers = "; ".join(doc.covers[:6])
+        outline.append(
+            f"{'  ' * doc.depth}- {doc.key} [{doc.doc_type}] {doc.code} {doc.title}"
+            + (f" — 다루는 요건: {covers}" if covers else "")
+        )
+    result = llm.structured(
+        system=EXTEND_PROMPT,
+        user=(
+            f"# 기존 문서 {len(existing)}건\n" + "\n".join(outline) + "\n\n"
+            f"# 새 적용요건 {len(requirements)}건\n{_requirement_listing(requirements)}"
+        ),
+        schema=ExtendOutput,
+        max_tokens=32000,
+    )
+    by_key = {doc.key: doc for doc in existing}
+
+    def readable(note: str) -> str:
+        """설명 속의 문서 키(d17)를 사람이 읽을 수 있는 제목으로 바꾼다."""
+        return re.sub(
+            r"\(?(?<![A-Za-z0-9])(d\d+)(?!\d)\)?",
+            lambda m: f"‘{by_key[m.group(1)].title}’" if m.group(1) in by_key else m.group(0),
+            note,
+        ).strip()
+
+    structure: dict[str, Any] = {"mode": "extend", "updates": [], "additions": []}
+    merged: dict[str, dict[str, Any]] = {}
+    for update in result.output.updates:
+        doc = by_key.get(update.document.strip())
+        if doc is None:
+            continue
+        entry = merged.setdefault(
+            doc.document_id,
+            {
+                "document_id": doc.document_id,
+                "code": doc.code,
+                "doc_type": doc.doc_type,
+                "title": doc.title,
+                "requirements": [],
+                "integration_note": readable(update.integration_note),
+            },
+        )
+        entry["requirements"] += update.requirements
+    structure["updates"] = sorted(merged.values(), key=lambda u: u["code"])
+    for addition in result.output.additions:
+        parent = by_key.get(addition.parent.strip())
+        doc_type = addition.doc_type.strip().upper()
+        if parent is None or _CHILD_OF.get(doc_type) != parent.doc_type:
+            continue  # 붙일 곳이 맞지 않는 새 문서는 버린다(요건은 미배정으로 남아 사람이 정한다)
+        structure["additions"].append(
+            {
+                "doc_type": doc_type,
+                "parent_document_id": parent.document_id,
+                "parent_code": parent.code,
+                "parent_title": parent.title,
+                "title": addition.title.strip(),
+                "purpose": addition.purpose.strip(),
+                "requirements": addition.requirements,
+                "integration_note": readable(addition.integration_note),
+                "templates": addition.templates if doc_type == "WI" else [],
+            }
+        )
+    structure, uncovered = normalize(structure, {r.code for r in requirements})
+    return DesignResult(
+        structure, uncovered, result.model, result.input_tokens, result.output_tokens
+    )
+
+
 # ── 문서 작성 ────────────────────────────────────────────────────────────────
 
 WRITE_PROMPT = """\
@@ -363,6 +553,9 @@ class WriteTask:
     allowed: list[RequirementBrief]
     ancestors: list[str]  # 상위 문서 제목(최상위부터)
     children: list[str]  # 바로 아래 문서 제목
+    # 기존 문서를 개정할 때: 지금 본문. 이미 근거로 대던 요건은 assigned 에 들어 있다.
+    current: list[dict[str, Any]] | None = None
+    new_codes: list[str] = field(default_factory=list)  # 이번에 새로 반영하는 요건
 
 
 def _write_request(task: WriteTask, feedback: str = "") -> str:
@@ -399,6 +592,23 @@ def _write_request(task: WriteTask, feedback: str = "") -> str:
         parts.append(line)
         if spec.get("template"):
             parts.append("  형식:\n" + "\n".join(f"    {t}" for t in spec["template"].splitlines()))
+
+    if task.current is not None:
+        parts.append(
+            "\n# 개정 지시\n"
+            "이 문서는 이미 운영 중입니다. 아래 지금 본문을 바탕으로 개정하세요. "
+            f"새로 반영할 요건: {', '.join(task.new_codes)}.\n"
+            "- 지금 본문의 내용과 표현은 될 수 있으면 그대로 두고, 새 요건 때문에 필요한 부분만 "
+            "고치거나 더합니다. 새 요건을 별도 문단으로 떼어 붙이지 말고 해당 활동의 흐름 안에 "
+            "녹입니다.\n"
+            "- 지금 본문이 이미 근거로 대던 요건도 계속 근거로 적습니다"
+            "(배정됨으로 표시돼 있습니다).\n"
+            "- 지금 본문의 〔조직 결정: …〕 표시는 그대로 둡니다."
+        )
+        parts.append("\n# 지금 본문")
+        for section in task.current:
+            body = (section.get("body_md") or "").strip() or "(비어 있음)"
+            parts.append(f"## {section['key']} | {section['title']}\n{body}")
 
     if feedback:
         parts.append(

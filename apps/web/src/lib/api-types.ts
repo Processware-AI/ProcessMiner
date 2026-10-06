@@ -926,6 +926,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/t/{tenant_slug}/systems/{system_slug}/audit-pack.xlsx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Audit Pack
+         * @description 심사 증적 묶음: 표준별로 요건 → 이행 문서 → 기록을 한 표에 담은 XLSX.
+         */
+        get: operations["download_audit_pack_api_t__tenant_slug__systems__system_slug__audit_pack_xlsx_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/t/{tenant_slug}/revisions/{revision_id}/requirements": {
         parameters: {
             query?: never;
@@ -1469,6 +1489,31 @@ export interface components {
         CoverageOut: {
             /** Sources */
             sources: components["schemas"]["CoverageSource"][];
+            /** Date From */
+            date_from: string | null;
+            /** Date To */
+            date_to: string | null;
+        };
+        /**
+         * CoverageRecord
+         * @description 요건을 이행한 증적: 발행한 기록.
+         */
+        CoverageRecord: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Title */
+            title: string;
+            /** Performed On */
+            performed_on: string | null;
+            /** Legacy */
+            legacy: boolean;
+            /** Artifact Id */
+            artifact_id: string | null;
         };
         /** CoverageRequirement */
         CoverageRequirement: {
@@ -1496,6 +1541,8 @@ export interface components {
             reason: string;
             /** Documents */
             documents: components["schemas"]["CoverageDocument"][];
+            /** Records */
+            records: components["schemas"]["CoverageRecord"][];
         };
         /** CoverageSource */
         CoverageSource: {
@@ -1512,6 +1559,8 @@ export interface components {
             drafted: number;
             /** Gaps */
             gaps: number;
+            /** Evidenced */
+            evidenced: number;
             /** Chapters */
             chapters: components["schemas"]["CoverageChapter"][];
             /** Requirements */
@@ -1882,6 +1931,8 @@ export interface components {
             };
             /** Integration Note */
             integration_note: string;
+            target?: components["schemas"]["DocumentRef"] | null;
+            anchor?: components["schemas"]["DocumentRef"] | null;
             /** Status */
             status: string;
             /** Document Id */
@@ -1898,6 +1949,8 @@ export interface components {
             id: string;
             /** Status */
             status: string;
+            /** Mode */
+            mode: string;
             /** Scope Code */
             scope_code: string;
             /** Sources */
@@ -1974,8 +2027,14 @@ export interface components {
         PlanStartIn: {
             /** Source Ids */
             source_ids: string[];
+            /**
+             * Mode
+             * @default new
+             * @enum {string}
+             */
+            mode: "new" | "extend";
             /** Scope Code */
-            scope_code: string;
+            scope_code?: string | null;
         };
         /** PlanWriteIn */
         PlanWriteIn: {
@@ -4893,7 +4952,10 @@ export interface operations {
     };
     get_coverage_api_t__tenant_slug__systems__system_slug__coverage_get: {
         parameters: {
-            query?: never;
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+            };
             header?: never;
             path: {
                 system_slug: string;
@@ -4911,6 +4973,39 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CoverageOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_audit_pack_api_t__tenant_slug__systems__system_slug__audit_pack_xlsx_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+            };
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

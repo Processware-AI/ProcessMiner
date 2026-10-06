@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app import storage
 from app.errors import api_error, not_found
 from app.extract.pdf import extract_pages
-from app.extract.structure import segment_clauses
+from app.extract.structure import segment
 from app.models import Requirement, Run, SourceClause, SourceDocument, SourcePage
 from app.pipelines.mining import has_obligation
 from app.services import audit
@@ -74,12 +74,13 @@ def register(
             "글자를 읽을 수 없는 PDF 입니다(스캔 이미지로 보입니다). "
             "문자 인식은 아직 지원하지 않습니다.",
         )
-    clauses = segment_clauses(pages)
+    clauses = segment(pages)
     if not clauses:
         raise api_error(
             422,
             "no_clauses",
-            "조항 번호(1, 1.1 …)를 찾지 못했습니다. 번호 체계가 있는 표준·법규 문서만 지원합니다.",
+            "조항 번호(1, 1.1 …)나 프로세스 ID(SWE.1 …)를 찾지 못했습니다. "
+            "번호 체계가 있는 표준·법규 문서만 지원합니다.",
         )
 
     source = SourceDocument(
@@ -115,7 +116,8 @@ def register(
             page_start=clause.page_start,
             page_end=clause.page_end,
             position=position,
-            has_obligation=clause.normative and has_obligation(clause),
+            has_obligation=clause.normative
+            and (clause.kind in ("process", "practice") or has_obligation(clause)),
             text=clause.text,
         )
         for position, clause in enumerate(clauses)

@@ -23,9 +23,9 @@ _ANNEX_KIND = re.compile(r"\((informative|normative)\)", re.IGNORECASE)
 
 @dataclass
 class Clause:
-    number: str  # "5.1.1", "B.4" 또는 "Annex B"
+    number: str  # "5.1.1", "B.4", "Annex B" 또는 프로세스 체계의 "SWE.1", "SWE.1.BP1"
     title: str
-    kind: str  # clause | annex
+    kind: str  # clause | annex | process | practice
     normative: bool
     page_start: int
     page_end: int
@@ -34,12 +34,16 @@ class Clause:
 
     @property
     def level(self) -> int:
+        if self.kind in ("process", "practice"):
+            return 1 if self.kind == "process" else 2
         return 1 if self.number.startswith("Annex") else self.number.count(".") + 1
 
     @property
     def parent_number(self) -> str | None:
-        if self.number.startswith("Annex"):
+        if self.kind == "process" or self.number.startswith("Annex"):
             return None
+        if self.kind == "practice":
+            return self.number.rsplit(".", 1)[0]
         if "." not in self.number:
             return None
         head = self.number.rsplit(".", 1)[0]
@@ -182,6 +186,79 @@ def segment_clauses(pages: list[PageText]) -> list[Clause]:
             title = [line for line in head if not _ANNEX_KIND.fullmatch(line)]
             clause.title = clean_title(title[0]) if title else ""
     return clauses
+
+
+# ── 프로세스 체계(조항 번호 대신 프로세스 ID 를 쓰는 문서) ────────────────────
+#
+# Automotive SPICE 같은 프로세스 평가 모델은 "SWE.1 Software Requirements Analysis" 처럼
+# 프로세스 ID 로 나뉘고, 요구사항에 해당하는 것은 기본 프랙티스(SWE.1.BP1)와 프로세스 결과다.
+# 장 번호가 앞에 붙은 제목("4.4.1 SWE.1 …")도 같은 프로세스로 본다.
+
+_PROCESS = re.compile(
+    r"^\s*(?:\d{1,2}(?:\.\d{1,2}){0,4}\s+)?([A-Z]{2,4}\.\d{1,2})\s+(\S.{0,140}?)\s*$"
+)
+_PRACTICE = re.compile(r"^\s*([A-Z]{2,4}\.\d{1,2}\.BP\d{1,2})\s*[:.\-–]?\s*(\S.{0,200}?)?\s*$")
+_MIN_PROCESSES = 3
+
+
+def segment_processes(pages: list[PageText]) -> list[Clause]:
+    """프로세스 ID 로 나눈다. 기본 프랙티스가 딸린 프로세스가 셋 미만이면 빈 목록."""
+    clauses: list[Clause] = []
+    current: Clause | None = None
+    process: str | None = None
+    for page in pages:
+        for line in page.text.splitlines():
+            if _TOC_LEADER.search(line):
+                continue
+            practice = _PRACTICE.match(line)
+            if practice and process and practice.group(1).startswith(process + "."):
+                current = Clause(
+                    number=practice.group(1),
+                    title=clean_title(practice.group(2) or ""),
+                    kind="practice",
+                    normative=True,
+                    page_start=page.page_no,
+                    page_end=page.page_no,
+                    lines=[line.strip()],
+                )
+                clauses.append(current)
+                continue
+            heading = _PROCESS.match(line)
+            # 본문 속에서 프로세스를 가리키는 줄("SWE.1 and SWE.2 …")은 제목이 아니다.
+            if heading and not re.match(r"^(and|or|to|of|for|in)\b", heading.group(2), re.I):
+                if heading.group(1) != process:
+                    process = heading.group(1)
+                    current = Clause(
+                        number=process,
+                        title=clean_title(heading.group(2)),
+                        kind="process",
+                        normative=True,
+                        page_start=page.page_no,
+                        page_end=page.page_no,
+                    )
+                    clauses.append(current)
+                    continue
+            if current is not None:
+                current.lines.append(line)
+                current.page_end = page.page_no
+
+    with_practices = {c.number.rsplit(".", 1)[0] for c in clauses if c.kind == "practice"}
+    clauses = [c for c in clauses if c.kind == "practice" or c.number in with_practices]
+    if len(with_practices) < _MIN_PROCESSES:
+        return []
+    # 같은 프로세스가 목차·본문에 두 번 나오면 본문(뒤의 것)을 쓴다.
+    seen: dict[str, int] = {}
+    for index, clause in enumerate(clauses):
+        seen[clause.number] = index
+    return [c for i, c in enumerate(clauses) if seen[c.number] == i]
+
+
+def segment(pages: list[PageText]) -> list[Clause]:
+    """문서의 짜임에 맞는 방식으로 나눈다. 프로세스 ID 체계가 뚜렷하면 그것을 쓴다."""
+    processes = segment_processes(pages)
+    if processes:
+        return processes
+    return segment_clauses(pages)
 
 
 def current_has_body(clauses: list[Clause]) -> bool:

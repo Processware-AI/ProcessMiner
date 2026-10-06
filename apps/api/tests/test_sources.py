@@ -8,7 +8,7 @@ import pytest
 
 from app import llm, worker
 from app.extract.pdf import PageText, _strip_running_lines
-from app.extract.structure import clean_title, segment_clauses
+from app.extract.structure import clean_title, segment, segment_clauses
 from app.pipelines import mining
 from app.pipelines.mining import MinedRequirement, MiningOutput
 from tests.conftest import add_member, new_tenant
@@ -113,6 +113,46 @@ def test_normative_annexes_are_mined_but_informative_ones_are_not():
     ]
     clauses = segment_clauses([PageText(page_no=1, text=pages[0], sparse=False)])
     assert [u.number for u in mining.build_units(clauses)] == ["2", "B.1"]
+
+
+ASPICE_PAGES = [
+    # 목차의 프로세스 이름은 조항이 아니다.
+    "Contents\n4.4.1 SWE.1 Software Requirements Analysis ........ 40\n",
+    "4 Process reference model\nThe processes SWE.1 and SWE.2 are described below.\n"
+    "4.4.1 SWE.1 Software Requirements Analysis\nProcess purpose\n"
+    "The purpose is to establish a structured set of software requirements.\n"
+    "Base practices\nSWE.1.BP1: Specify software requirements. Use the system requirements to\n"
+    "identify and document the functional and non-functional requirements.\n"
+    "SWE.1.BP2: Structure software requirements.\n",
+    "4.4.2 SWE.2 Software Architectural Design\n"
+    "SWE.2.BP1: Specify static aspects of the software architecture.\n"
+    "SWE.3 Software Detailed Design and Unit Construction\n"
+    "SWE.3.BP1: Specify the static aspects of the detailed design.\n"
+    "NOTE 1 Not a practice.\n",
+]
+
+
+def test_process_assessment_models_are_split_by_process_and_base_practice():
+    pages = [PageText(page_no=i, text=t, sparse=False) for i, t in enumerate(ASPICE_PAGES, 1)]
+    clauses = segment(pages)
+    assert [(c.number, c.kind, c.level, c.parent_number) for c in clauses] == [
+        ("SWE.1", "process", 1, None),
+        ("SWE.1.BP1", "practice", 2, "SWE.1"),
+        ("SWE.1.BP2", "practice", 2, "SWE.1"),
+        ("SWE.2", "process", 1, None),
+        ("SWE.2.BP1", "practice", 2, "SWE.2"),
+        ("SWE.3", "process", 1, None),
+        ("SWE.3.BP1", "practice", 2, "SWE.3"),
+    ]
+    by_number = {c.number: c for c in clauses}
+    assert by_number["SWE.1"].title == "Software Requirements Analysis"
+    assert by_number["SWE.1.BP1"].title.startswith("Specify software requirements")
+    assert "non-functional requirements" in by_number["SWE.1.BP1"].text
+    assert "NOTE 1" in by_number["SWE.3.BP1"].text
+    # 기본 프랙티스에는 shall 이 없어도 요건 도출 대상이다. 프로세스마다 한 묶음.
+    assert [u.number for u in mining.build_units(clauses)] == ["SWE.1", "SWE.2", "SWE.3"]
+    # 번호 조항 문서는 지금처럼 나눈다.
+    assert segment(_pages())[0].number == "1"
 
 
 def test_quote_must_exist_in_the_clause():

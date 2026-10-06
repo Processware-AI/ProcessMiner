@@ -67,6 +67,11 @@ class GenerationPlan(Base):
         index=True,
     )
     scope_code: Mapped[str] = mapped_column(String(8), nullable=False)
+    # new: 새 문서 체계를 설계한다.
+    # extend: 이미 있는 문서 체계에 표준을 더한다(기존 문서 개정 + 필요한 새 문서).
+    mode: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="new", server_default="new"
+    )
     # designing → proposed → writing → done | failed | discarded
     status: Mapped[str] = mapped_column(String(12), nullable=False, default="designing")
     # {"policies": [{title, purpose, requirements[],
