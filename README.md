@@ -12,6 +12,10 @@
 > 파생 프로덕트 비전: `docs/architecture/derivative-products.md` (3-Vault 생태계 — 코어 + RFP-to-Proposal + Project Asset Generator)
 > 차원별 운영 가이드: `표준_빌드_워크플로우_가이드.md` (1) · `표준_프로세스_실행_가이드.md` (2) · `표준_프로세스_심사_가이드.md` (3) · `표준_프로세스_제개정_가이드.md` (4)
 
+## 웹 플랫폼 (개발 중)
+
+여러 회사·여러 조직의 체계를 한 저장소에서 운영하기 위해, 아래 CLI 하네스에서 검증한 개념을 웹 애플리케이션으로 옮기는 중이다. 코드는 `apps/`(API·웹)와 `seed/`(참조 데이터)에 있고, 실행 방법과 진행 상황은 [`apps/README.md`](apps/README.md) 에 있다. 이 문서의 나머지는 기존 CLI 하네스(`.claude/`, `vault/`, `publish/`)를 설명한다.
+
 ## 5단계 자동화 매트릭스
 
 | 차원 | 슬래시 | 에이전트 | 핵심 산출물 |
