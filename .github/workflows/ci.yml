@@ -1,0 +1,60 @@
+name: ci
+
+on:
+  pull_request:
+    paths: ["apps/**", "seed/**", "docker/**", ".github/workflows/ci.yml"]
+  push:
+    branches: [main]
+    paths: ["apps/**", "seed/**", "docker/**", ".github/workflows/ci.yml"]
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: pm_owner
+          POSTGRES_PASSWORD: pm_owner
+          POSTGRES_DB: postgres
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pm_owner" --health-interval 3s
+          --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/api/pyproject.toml
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      # 테스트는 슈퍼유저가 아닌 역할로 접속해 회사 간 격리를 검증한다.
+      - name: Create application role
+        run: psql "postgresql://pm_owner:pm_owner@localhost:55432/postgres" -f ../../docker/postgres/init.sql
+      - run: pytest
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build

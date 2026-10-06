@@ -1,0 +1,64 @@
+# 로컬 개발용. 기본 실행은 인프라(postgres, minio)만 띄운다.
+#   docker compose up -d                  # 인프라만 (api·web 은 로컬 프로세스로 실행)
+#   docker compose --profile full up -d   # api·web 까지 컨테이너로 실행
+# 호스트 포트는 로컬에 설치된 PostgreSQL(5432)과 겹치지 않게 5xxxx 대를 쓴다.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: pm_owner
+      POSTGRES_PASSWORD: pm_owner
+      POSTGRES_DB: processminer
+    ports:
+      - "55432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pm_owner -d processminer"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: pm_minio
+      MINIO_ROOT_PASSWORD: pm_minio_secret
+    ports:
+      - "59000:9000"
+      - "59001:9001"
+    volumes:
+      - miniodata:/data
+
+  api:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      PM_DATABASE_URL: postgresql+psycopg://pm_app:pm_app@postgres:5432/processminer
+      PM_MIGRATION_DATABASE_URL: postgresql+psycopg://pm_owner:pm_owner@postgres:5432/processminer
+      PM_WEB_BASE_URL: http://localhost:3000
+      PM_AUTH_DEV_ECHO: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "58000:8000"
+
+  web:
+    profiles: ["full"]
+    build:
+      context: apps/web
+    environment:
+      API_ORIGIN: http://api:8000
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
+  miniodata:
