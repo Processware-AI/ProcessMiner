@@ -28,6 +28,11 @@ export type InboxItem = Schemas["InboxItem"];
 export type BatchReview = Schemas["BatchReviewOut"];
 export type DecisionGroup = Schemas["DecisionGroup"];
 export type CoverageSource = Schemas["CoverageSource"];
+export type Artifact = Schemas["ArtifactOut"];
+export type ArtifactDetail = Schemas["ArtifactDetail"];
+export type ProcessRecord = Schemas["RecordOut"];
+export type RecordField = Schemas["RecordField"];
+export type RecordTemplate = Schemas["RecordTemplateOut"];
 export type CoverageRequirement = Schemas["CoverageRequirement"];
 export type DecisionOccurrence = Schemas["DecisionOccurrence"];
 export type AuditLog = Schemas["AuditLogOut"];
@@ -93,6 +98,24 @@ export async function unwrap<T>(
   }
   if (!result.response.ok) throw toApiError(result.error, result.response.status);
   return result.data as T;
+}
+
+/** 기존 산출물 파일을 올린다. */
+export async function uploadArtifact(tenant: string, system: string, file: File): Promise<Artifact> {
+  const body = new FormData();
+  body.set("file", file);
+  let response: Response;
+  try {
+    response = await fetch(
+      `/api/t/${encodeURIComponent(tenant)}/systems/${encodeURIComponent(system)}/artifacts`,
+      { method: "POST", body, credentials: "same-origin" },
+    );
+  } catch {
+    throw new ApiError("서버에 연결할 수 없습니다.", 0, "network");
+  }
+  const payload: unknown = await response.json().catch(() => undefined);
+  if (!response.ok) throw toApiError(payload, response.status);
+  return payload as Artifact;
 }
 
 /** 원문 파일을 올린다. 파일 전송이라 생성된 클라이언트 대신 fetch 를 직접 쓴다. */

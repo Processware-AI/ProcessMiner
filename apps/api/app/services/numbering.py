@@ -28,6 +28,13 @@ def _next_seq(db: Session, tenant_id: uuid.UUID, root_system_id: uuid.UUID, key:
     ).scalar_one()
 
 
+def next_record_seq(
+    db: Session, tenant_id: uuid.UUID, root_system_id: uuid.UUID, template_code: str
+) -> int:
+    """양식별 기록 일련번호. 계보 안에서 양식마다 1부터 센다."""
+    return _next_seq(db, tenant_id, root_system_id, f"REC:{template_code}")
+
+
 def allocate_code(
     db: Session,
     *,

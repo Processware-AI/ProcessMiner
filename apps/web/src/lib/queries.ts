@@ -29,6 +29,13 @@ export const keys = {
   documents: (tenant: string, system: string) => ["t", tenant, "docs", "list", system] as const,
   decisions: (tenant: string, system: string) => ["t", tenant, "docs", "decisions", system] as const,
   coverage: (tenant: string, system: string) => ["t", tenant, "docs", "coverage", system] as const,
+  recordsAll: (tenant: string) => ["t", tenant, "records"] as const,
+  artifacts: (tenant: string, system: string) => ["t", tenant, "records", "artifacts", system] as const,
+  artifact: (tenant: string, id: string) => ["t", tenant, "records", "artifact", id] as const,
+  records: (tenant: string, system: string) => ["t", tenant, "records", "list", system] as const,
+  record: (tenant: string, id: string) => ["t", tenant, "records", "record", id] as const,
+  recordTemplates: (tenant: string, system: string) =>
+    ["t", tenant, "records", "templates", system] as const,
   docsAll: (tenant: string) => ["t", tenant, "docs"] as const,
   // 같은 문서라도 보는 체계에 따라 모습이 다르다(하위 체계에서는 상속·재정의·제외).
   document: (tenant: string, id: string, system = "") =>
@@ -136,6 +143,71 @@ export function useDocuments(tenant: string, system: string | undefined) {
       unwrap(
         api.GET("/api/t/{tenant_slug}/systems/{system_slug}/documents", {
           params: { path: { tenant_slug: tenant, system_slug: system! } },
+        }),
+      ),
+  });
+}
+
+export function useArtifacts(tenant: string, system: string) {
+  return useQuery({
+    queryKey: keys.artifacts(tenant, system),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/t/{tenant_slug}/systems/{system_slug}/artifacts", {
+          params: { path: { tenant_slug: tenant, system_slug: system } },
+        }),
+      ),
+    // 양식을 찾거나 값을 옮기는 동안에는 진행 상황을 계속 받아온다.
+    refetchInterval: (query) =>
+      query.state.data?.some((artifact) => isBusy(artifact.run?.status)) ? 2000 : false,
+  });
+}
+
+export function useArtifact(tenant: string, artifactId: string) {
+  return useQuery({
+    queryKey: keys.artifact(tenant, artifactId),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/t/{tenant_slug}/artifacts/{artifact_id}", {
+          params: { path: { tenant_slug: tenant, artifact_id: artifactId } },
+        }),
+      ),
+    refetchInterval: (query) => (isBusy(query.state.data?.run?.status) ? 1500 : false),
+  });
+}
+
+export function useRecords(tenant: string, system: string) {
+  return useQuery({
+    queryKey: keys.records(tenant, system),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/t/{tenant_slug}/systems/{system_slug}/records", {
+          params: { path: { tenant_slug: tenant, system_slug: system } },
+        }),
+      ),
+  });
+}
+
+export function useRecord(tenant: string, recordId: string | null) {
+  return useQuery({
+    queryKey: keys.record(tenant, recordId ?? ""),
+    enabled: Boolean(recordId),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/t/{tenant_slug}/records/{record_id}", {
+          params: { path: { tenant_slug: tenant, record_id: recordId! } },
+        }),
+      ),
+  });
+}
+
+export function useRecordTemplates(tenant: string, system: string) {
+  return useQuery({
+    queryKey: keys.recordTemplates(tenant, system),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/t/{tenant_slug}/systems/{system_slug}/record-templates", {
+          params: { path: { tenant_slug: tenant, system_slug: system } },
         }),
       ),
   });

@@ -59,6 +59,7 @@ def _tenant_out(ctx: TenantContext) -> TenantOut:
         slug=ctx.tenant.slug,
         name=ctx.tenant.name,
         four_eyes=four_eyes_enabled(ctx.tenant),
+        artifact_ai=bool(ctx.tenant.settings.get("artifact_ai", False)),
         tenant_role=ctx.actor.tenant_role,
         archived_at=ctx.tenant.archived_at,
         actions=ctx.allowed_actions(),
@@ -109,8 +110,9 @@ def update_tenant(
     changes = payload.model_dump(exclude_none=True)
     if "name" in changes:
         ctx.tenant.name = changes["name"]
-    if "four_eyes" in changes:
-        ctx.tenant.settings = {**ctx.tenant.settings, "four_eyes": changes["four_eyes"]}
+    for key in ("four_eyes", "artifact_ai"):
+        if key in changes:
+            ctx.tenant.settings = {**ctx.tenant.settings, key: changes[key]}
     ctx.db.flush()
     if changes:
         audit.record(

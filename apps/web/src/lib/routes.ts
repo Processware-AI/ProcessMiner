@@ -6,6 +6,9 @@ export const routes = {
     `/${tenant}/s/${system}/docs/${documentId}`,
   build: (tenant: string, system: string) => `/${tenant}/s/${system}/build`,
   coverage: (tenant: string, system: string) => `/${tenant}/s/${system}/coverage`,
+  records: (tenant: string, system: string) => `/${tenant}/s/${system}/records`,
+  artifact: (tenant: string, system: string, artifactId: string) =>
+    `/${tenant}/s/${system}/records/${artifactId}`,
   decisions: (tenant: string, system: string, query?: string) =>
     `/${tenant}/s/${system}/decisions${query ? `?q=${encodeURIComponent(query)}` : ""}`,
   sources: (tenant: string) => `/${tenant}/sources`,

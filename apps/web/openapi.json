@@ -3610,6 +3610,608 @@
         }
       }
     },
+    "/api/t/{tenant_slug}/systems/{system_slug}/record-templates": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "List Record Templates",
+        "description": "이 체계에서 기록을 만들 수 있는 양식.",
+        "operationId": "list_record_templates_api_t__tenant_slug__systems__system_slug__record_templates_get",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecordTemplateOut"
+                  },
+                  "title": "Response List Record Templates Api T  Tenant Slug  Systems  System Slug  Record Templates Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/systems/{system_slug}/artifacts": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "List Artifacts",
+        "operationId": "list_artifacts_api_t__tenant_slug__systems__system_slug__artifacts_get",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArtifactOut"
+                  },
+                  "title": "Response List Artifacts Api T  Tenant Slug  Systems  System Slug  Artifacts Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Upload Artifact",
+        "description": "산출물을 올린다. 올리는 즉시 글자를 뽑아 두고, AI 처리가 켜져 있으면 양식을 찾기 시작한다.",
+        "operationId": "upload_artifact_api_t__tenant_slug__systems__system_slug__artifacts_post",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_artifact_api_t__tenant_slug__systems__system_slug__artifacts_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/artifacts/{artifact_id}": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Get Artifact",
+        "operationId": "get_artifact_api_t__tenant_slug__artifacts__artifact_id__get",
+        "parameters": [
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Artifact Id"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Delete Artifact",
+        "operationId": "delete_artifact_api_t__tenant_slug__artifacts__artifact_id__delete",
+        "parameters": [
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Artifact Id"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/artifacts/{artifact_id}/match": {
+      "post": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Match Artifact",
+        "description": "어느 양식의 기록인지 모델에게 (다시) 묻는다.",
+        "operationId": "match_artifact_api_t__tenant_slug__artifacts__artifact_id__match_post",
+        "parameters": [
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Artifact Id"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/artifacts/{artifact_id}/template": {
+      "put": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Set Artifact Template",
+        "description": "양식을 확정한다(모델의 제안을 받아들이거나 직접 고른다). 이어서 항목 값을 뽑는다.",
+        "operationId": "set_artifact_template_api_t__tenant_slug__artifacts__artifact_id__template_put",
+        "parameters": [
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Artifact Id"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactTemplateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/systems/{system_slug}/records": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "List Records",
+        "description": "발행한 기록. 최근 것이 먼저.",
+        "operationId": "list_records_api_t__tenant_slug__systems__system_slug__records_get",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RecordOut"
+                  },
+                  "title": "Response List Records Api T  Tenant Slug  Systems  System Slug  Records Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/records/{record_id}": {
+      "get": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Get Record",
+        "operationId": "get_record_api_t__tenant_slug__records__record_id__get",
+        "parameters": [
+          {
+            "name": "record_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Record Id"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Update Record",
+        "operationId": "update_record_api_t__tenant_slug__records__record_id__patch",
+        "parameters": [
+          {
+            "name": "record_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Record Id"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/records/{record_id}/publish": {
+      "post": {
+        "tags": [
+          "records"
+        ],
+        "summary": "Publish Record",
+        "operationId": "publish_record_api_t__tenant_slug__records__record_id__publish_post",
+        "parameters": [
+          {
+            "name": "record_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Record Id"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -3638,6 +4240,286 @@
   },
   "components": {
     "schemas": {
+      "ArtifactDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "char_count": {
+            "type": "integer",
+            "title": "Char Count"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "performed_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performed On"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "match_state": {
+            "type": "string",
+            "title": "Match State"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "match_confidence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Confidence"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/MatchCandidateOut"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "record": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Actions"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/SegmentOut"
+            },
+            "type": "array",
+            "title": "Segments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "kind",
+          "size_bytes",
+          "char_count",
+          "title",
+          "performed_on",
+          "state",
+          "match_state",
+          "template",
+          "match_confidence",
+          "candidates",
+          "record",
+          "run",
+          "created_at",
+          "actions",
+          "segments"
+        ],
+        "title": "ArtifactDetail"
+      },
+      "ArtifactOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "char_count": {
+            "type": "integer",
+            "title": "Char Count"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "performed_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performed On"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "match_state": {
+            "type": "string",
+            "title": "Match State"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "match_confidence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Confidence"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/MatchCandidateOut"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "record": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Actions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "kind",
+          "size_bytes",
+          "char_count",
+          "title",
+          "performed_on",
+          "state",
+          "match_state",
+          "template",
+          "match_confidence",
+          "candidates",
+          "record",
+          "run",
+          "created_at",
+          "actions"
+        ],
+        "title": "ArtifactOut"
+      },
+      "ArtifactTemplateIn": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Document Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id"
+        ],
+        "title": "ArtifactTemplateIn"
+      },
       "AuditEntryOut": {
         "properties": {
           "id": {
@@ -4023,6 +4905,20 @@
           "results"
         ],
         "title": "BatchReviewOut"
+      },
+      "Body_upload_artifact_api_t__tenant_slug__systems__system_slug__artifacts_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_artifact_api_t__tenant_slug__systems__system_slug__artifacts_post"
       },
       "Body_upload_source_api_t__tenant_slug__sources_post": {
         "properties": {
@@ -5031,6 +5927,28 @@
         "type": "object",
         "title": "LoginLinkOut"
       },
+      "MatchCandidateOut": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/DocumentRef"
+          },
+          "confidence": {
+            "type": "integer",
+            "title": "Confidence"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document",
+          "confidence",
+          "reason"
+        ],
+        "title": "MatchCandidateOut"
+      },
       "MeOut": {
         "properties": {
           "user": {
@@ -5656,6 +6574,425 @@
         },
         "type": "object",
         "title": "PlanWriteIn"
+      },
+      "RecordCounts": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "empty": {
+            "type": "integer",
+            "title": "Empty"
+          },
+          "unverified": {
+            "type": "integer",
+            "title": "Unverified"
+          },
+          "human": {
+            "type": "integer",
+            "title": "Human"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "empty",
+          "unverified",
+          "human"
+        ],
+        "title": "RecordCounts"
+      },
+      "RecordField": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "artifact",
+              "human",
+              "empty"
+            ],
+            "title": "Source"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          },
+          "location": {
+            "type": "string",
+            "title": "Location"
+          },
+          "verified": {
+            "type": "boolean",
+            "title": "Verified"
+          },
+          "needs_check": {
+            "type": "boolean",
+            "title": "Needs Check"
+          },
+          "original_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Value"
+          },
+          "filled_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "filled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filled At"
+          },
+          "confirmed_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "value",
+          "source",
+          "quote",
+          "location",
+          "verified",
+          "needs_check",
+          "original_value",
+          "filled_by",
+          "filled_at",
+          "confirmed_by"
+        ],
+        "title": "RecordField"
+      },
+      "RecordFieldIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 10000,
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "value"
+        ],
+        "title": "RecordFieldIn"
+      },
+      "RecordOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "legacy": {
+            "type": "boolean",
+            "title": "Legacy"
+          },
+          "performed_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performed On"
+          },
+          "template": {
+            "$ref": "#/components/schemas/DocumentRef"
+          },
+          "template_version": {
+            "type": "string",
+            "title": "Template Version"
+          },
+          "template_approved": {
+            "type": "boolean",
+            "title": "Template Approved"
+          },
+          "artifact_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Id"
+          },
+          "artifact_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Filename"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/RecordField"
+            },
+            "type": "array",
+            "title": "Fields"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/RecordCounts"
+          },
+          "generated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "published_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Actions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "title",
+          "status",
+          "legacy",
+          "performed_on",
+          "template",
+          "template_version",
+          "template_approved",
+          "artifact_id",
+          "artifact_filename",
+          "fields",
+          "counts",
+          "generated_by",
+          "created_at",
+          "published_at",
+          "published_by",
+          "actions"
+        ],
+        "title": "RecordOut"
+      },
+      "RecordPatch": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "performed_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performed On"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/RecordFieldIn"
+            },
+            "type": "array",
+            "title": "Fields",
+            "default": []
+          },
+          "confirm": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Confirm",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "RecordPatch"
+      },
+      "RecordSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/RecordCounts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "title",
+          "status",
+          "counts"
+        ],
+        "title": "RecordSummary"
+      },
+      "RecordTemplateOut": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/DocumentRef"
+          },
+          "instruction": {
+            "type": "string",
+            "title": "Instruction"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "approved": {
+            "type": "boolean",
+            "title": "Approved"
+          },
+          "fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document",
+          "instruction",
+          "version",
+          "approved",
+          "fields"
+        ],
+        "title": "RecordTemplateOut",
+        "description": "기록을 만들 수 있는 양식."
       },
       "RequirementCounts": {
         "properties": {
@@ -6492,6 +7829,24 @@
         ],
         "title": "SectionSpec"
       },
+      "SegmentOut": {
+        "properties": {
+          "loc": {
+            "type": "string",
+            "title": "Loc"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "text"
+        ],
+        "title": "SegmentOut"
+      },
       "SourceOut": {
         "properties": {
           "id": {
@@ -7001,6 +8356,10 @@
             "type": "boolean",
             "title": "Four Eyes"
           },
+          "artifact_ai": {
+            "type": "boolean",
+            "title": "Artifact Ai"
+          },
           "tenant_role": {
             "anyOf": [
               {
@@ -7038,6 +8397,7 @@
           "slug",
           "name",
           "four_eyes",
+          "artifact_ai",
           "tenant_role",
           "archived_at",
           "actions"
@@ -7106,6 +8466,17 @@
               }
             ],
             "title": "Four Eyes"
+          },
+          "artifact_ai": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Ai"
           }
         },
         "type": "object",

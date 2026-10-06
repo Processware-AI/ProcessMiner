@@ -139,7 +139,7 @@ class Run(Base):
 
     id: Mapped[uuid.UUID] = uuid_pk()
     tenant_id: Mapped[uuid.UUID] = tenant_fk()
-    # mine_requirements | design_system | write_documents
+    # mine_requirements | design_system | write_documents | harmonize_artifact
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(12), nullable=False, default="queued", index=True)
     source_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -147,6 +147,9 @@ class Run(Base):
     )
     plan_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("generation_plan.id", ondelete="CASCADE"), index=True
+    )
+    artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("artifact.id", ondelete="CASCADE"), index=True
     )
     # {"done": 3, "total": 31, "failed": 0, "input_tokens": …, "output_tokens": …}
     progress: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)

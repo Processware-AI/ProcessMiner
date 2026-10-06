@@ -24,6 +24,7 @@ from .platform import (
     StandardDef,
     Tenant,
 )
+from .records import Artifact, ArtifactText, ProcessRecord
 from .sources import Requirement, Run, RunEvent, SourceClause, SourceDocument, SourcePage
 from .tenancy import OrgUnit, ProcessSystem, RoleAssignment, ScopeCode
 
@@ -49,10 +50,15 @@ TENANT_TABLES = [
     "generation_plan",
     "plan_source",
     "document_requirement",
+    "artifact",
+    "artifact_text",
+    "process_record",
 ]
 
 __all__ = [
     "AppUser",
+    "Artifact",
+    "ArtifactText",
     "AuditLog",
     "AuthSession",
     "Base",
@@ -69,6 +75,7 @@ __all__ = [
     "Membership",
     "OrgUnit",
     "PlanSource",
+    "ProcessRecord",
     "ProcessSystem",
     "Requirement",
     "RequirementExclusion",

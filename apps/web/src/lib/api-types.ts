@@ -946,6 +946,160 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/t/{tenant_slug}/systems/{system_slug}/record-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Record Templates
+         * @description 이 체계에서 기록을 만들 수 있는 양식.
+         */
+        get: operations["list_record_templates_api_t__tenant_slug__systems__system_slug__record_templates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/systems/{system_slug}/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Artifacts */
+        get: operations["list_artifacts_api_t__tenant_slug__systems__system_slug__artifacts_get"];
+        put?: never;
+        /**
+         * Upload Artifact
+         * @description 산출물을 올린다. 올리는 즉시 글자를 뽑아 두고, AI 처리가 켜져 있으면 양식을 찾기 시작한다.
+         */
+        post: operations["upload_artifact_api_t__tenant_slug__systems__system_slug__artifacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/artifacts/{artifact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Artifact */
+        get: operations["get_artifact_api_t__tenant_slug__artifacts__artifact_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Artifact */
+        delete: operations["delete_artifact_api_t__tenant_slug__artifacts__artifact_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/artifacts/{artifact_id}/match": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Match Artifact
+         * @description 어느 양식의 기록인지 모델에게 (다시) 묻는다.
+         */
+        post: operations["match_artifact_api_t__tenant_slug__artifacts__artifact_id__match_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/artifacts/{artifact_id}/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Artifact Template
+         * @description 양식을 확정한다(모델의 제안을 받아들이거나 직접 고른다). 이어서 항목 값을 뽑는다.
+         */
+        put: operations["set_artifact_template_api_t__tenant_slug__artifacts__artifact_id__template_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/systems/{system_slug}/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Records
+         * @description 발행한 기록. 최근 것이 먼저.
+         */
+        get: operations["list_records_api_t__tenant_slug__systems__system_slug__records_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/records/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Record */
+        get: operations["get_record_api_t__tenant_slug__records__record_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Record */
+        patch: operations["update_record_api_t__tenant_slug__records__record_id__patch"];
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/records/{record_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish Record */
+        post: operations["publish_record_api_t__tenant_slug__records__record_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -967,6 +1121,92 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ArtifactDetail */
+        ArtifactDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Filename */
+            filename: string;
+            /** Kind */
+            kind: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Char Count */
+            char_count: number;
+            /** Title */
+            title: string;
+            /** Performed On */
+            performed_on: string | null;
+            /** State */
+            state: string;
+            /** Match State */
+            match_state: string;
+            template: components["schemas"]["DocumentRef"] | null;
+            /** Match Confidence */
+            match_confidence: number | null;
+            /** Candidates */
+            candidates: components["schemas"]["MatchCandidateOut"][];
+            record: components["schemas"]["RecordSummary"] | null;
+            run: components["schemas"]["RunOut"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Actions */
+            actions: string[];
+            /** Segments */
+            segments: components["schemas"]["SegmentOut"][];
+        };
+        /** ArtifactOut */
+        ArtifactOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Filename */
+            filename: string;
+            /** Kind */
+            kind: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Char Count */
+            char_count: number;
+            /** Title */
+            title: string;
+            /** Performed On */
+            performed_on: string | null;
+            /** State */
+            state: string;
+            /** Match State */
+            match_state: string;
+            template: components["schemas"]["DocumentRef"] | null;
+            /** Match Confidence */
+            match_confidence: number | null;
+            /** Candidates */
+            candidates: components["schemas"]["MatchCandidateOut"][];
+            record: components["schemas"]["RecordSummary"] | null;
+            run: components["schemas"]["RunOut"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Actions */
+            actions: string[];
+        };
+        /** ArtifactTemplateIn */
+        ArtifactTemplateIn: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+        };
         /** AuditEntryOut */
         AuditEntryOut: {
             /** Id */
@@ -1110,6 +1350,11 @@ export interface components {
             failed: number;
             /** Results */
             results: components["schemas"]["BatchItemResult"][];
+        };
+        /** Body_upload_artifact_api_t__tenant_slug__systems__system_slug__artifacts_post */
+        Body_upload_artifact_api_t__tenant_slug__systems__system_slug__artifacts_post: {
+            /** File */
+            file: string;
         };
         /** Body_upload_source_api_t__tenant_slug__sources_post */
         Body_upload_source_api_t__tenant_slug__sources_post: {
@@ -1497,6 +1742,14 @@ export interface components {
             /** Dev Link */
             dev_link?: string | null;
         };
+        /** MatchCandidateOut */
+        MatchCandidateOut: {
+            document: components["schemas"]["DocumentRef"];
+            /** Confidence */
+            confidence: number;
+            /** Reason */
+            reason: string;
+        };
         /** MeOut */
         MeOut: {
             user: components["schemas"]["UserOut"];
@@ -1728,6 +1981,139 @@ export interface components {
         PlanWriteIn: {
             /** Policies */
             policies?: string[] | null;
+        };
+        /** RecordCounts */
+        RecordCounts: {
+            /** Total */
+            total: number;
+            /** Empty */
+            empty: number;
+            /** Unverified */
+            unverified: number;
+            /** Human */
+            human: number;
+        };
+        /** RecordField */
+        RecordField: {
+            /** Name */
+            name: string;
+            /** Value */
+            value: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "artifact" | "human" | "empty";
+            /** Quote */
+            quote: string;
+            /** Location */
+            location: string;
+            /** Verified */
+            verified: boolean;
+            /** Needs Check */
+            needs_check: boolean;
+            /** Original Value */
+            original_value: string | null;
+            filled_by: components["schemas"]["UserRef"] | null;
+            /** Filled At */
+            filled_at: string | null;
+            confirmed_by: components["schemas"]["UserRef"] | null;
+        };
+        /** RecordFieldIn */
+        RecordFieldIn: {
+            /** Name */
+            name: string;
+            /** Value */
+            value: string;
+        };
+        /** RecordOut */
+        RecordOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string | null;
+            /** Title */
+            title: string;
+            /** Status */
+            status: string;
+            /** Legacy */
+            legacy: boolean;
+            /** Performed On */
+            performed_on: string | null;
+            template: components["schemas"]["DocumentRef"];
+            /** Template Version */
+            template_version: string;
+            /** Template Approved */
+            template_approved: boolean;
+            /** Artifact Id */
+            artifact_id: string | null;
+            /** Artifact Filename */
+            artifact_filename: string | null;
+            /** Fields */
+            fields: components["schemas"]["RecordField"][];
+            counts: components["schemas"]["RecordCounts"];
+            /** Generated By */
+            generated_by: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Published At */
+            published_at: string | null;
+            published_by: components["schemas"]["UserRef"] | null;
+            /** Actions */
+            actions: string[];
+        };
+        /** RecordPatch */
+        RecordPatch: {
+            /** Title */
+            title?: string | null;
+            /** Performed On */
+            performed_on?: string | null;
+            /**
+             * Fields
+             * @default []
+             */
+            fields: components["schemas"]["RecordFieldIn"][];
+            /**
+             * Confirm
+             * @default []
+             */
+            confirm: string[];
+        };
+        /** RecordSummary */
+        RecordSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string | null;
+            /** Title */
+            title: string;
+            /** Status */
+            status: string;
+            counts: components["schemas"]["RecordCounts"];
+        };
+        /**
+         * RecordTemplateOut
+         * @description 기록을 만들 수 있는 양식.
+         */
+        RecordTemplateOut: {
+            document: components["schemas"]["DocumentRef"];
+            /** Instruction */
+            instruction: string;
+            /** Version */
+            version: string;
+            /** Approved */
+            approved: boolean;
+            /** Fields */
+            fields: string[];
         };
         /** RequirementCounts */
         RequirementCounts: {
@@ -2032,6 +2418,13 @@ export interface components {
              */
             normative: boolean;
         };
+        /** SegmentOut */
+        SegmentOut: {
+            /** Loc */
+            loc: string;
+            /** Text */
+            text: string;
+        };
         /** SourceOut */
         SourceOut: {
             /**
@@ -2234,6 +2627,8 @@ export interface components {
             name: string;
             /** Four Eyes */
             four_eyes: boolean;
+            /** Artifact Ai */
+            artifact_ai: boolean;
             /** Tenant Role */
             tenant_role: string | null;
             /** Archived At */
@@ -2263,6 +2658,8 @@ export interface components {
             name?: string | null;
             /** Four Eyes */
             four_eyes?: boolean | null;
+            /** Artifact Ai */
+            artifact_ai?: boolean | null;
         };
         /** TenantSummary */
         TenantSummary: {
@@ -4545,6 +4942,368 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RevisionRequirementOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_record_templates_api_t__tenant_slug__systems__system_slug__record_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordTemplateOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_artifacts_api_t__tenant_slug__systems__system_slug__artifacts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_artifact_api_t__tenant_slug__systems__system_slug__artifacts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_artifact_api_t__tenant_slug__systems__system_slug__artifacts_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_artifact_api_t__tenant_slug__artifacts__artifact_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifact_id: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_artifact_api_t__tenant_slug__artifacts__artifact_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifact_id: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_artifact_api_t__tenant_slug__artifacts__artifact_id__match_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifact_id: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_artifact_template_api_t__tenant_slug__artifacts__artifact_id__template_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifact_id: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtifactTemplateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_records_api_t__tenant_slug__systems__system_slug__records_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_record_api_t__tenant_slug__records__record_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_record_api_t__tenant_slug__records__record_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_record_api_t__tenant_slug__records__record_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordOut"];
                 };
             };
             /** @description Validation Error */

@@ -1,6 +1,6 @@
 import re
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import (
@@ -90,6 +90,8 @@ class TenantIn(BaseModel):
 class TenantSettingsIn(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     four_eyes: bool | None = None
+    # 산출물(회사의 기존 문서)을 AI 모델로 보내 처리하는 데 동의한다. 기본은 꺼짐이다.
+    artifact_ai: bool | None = None
 
 
 class TenantOut(BaseModel):
@@ -97,6 +99,7 @@ class TenantOut(BaseModel):
     slug: str
     name: str
     four_eyes: bool
+    artifact_ai: bool
     tenant_role: str | None
     archived_at: datetime | None
     actions: list[str]
@@ -620,6 +623,121 @@ class RevisionRequirementOut(BaseModel):
     section_key: str
     requirement: RequirementOut
     source: SourceRef
+
+
+# ── 산출물과 기록 ────────────────────────────────────────────────────────────
+
+
+class RecordTemplateOut(BaseModel):
+    """기록을 만들 수 있는 양식."""
+
+    document: DocumentRef
+    instruction: str  # 상위 지침의 제목
+    version: str
+    approved: bool  # 승인된 양식인가. 아니면 작성 중인 판을 기준으로 한다.
+    fields: list[str]
+
+
+class MatchCandidateOut(BaseModel):
+    document: DocumentRef
+    confidence: int  # 0~100. 75 이상이면 바로 항목까지 뽑고, 50 미만이면 제안하지 않는다.
+    reason: str
+
+
+class RecordCounts(BaseModel):
+    total: int
+    empty: int  # 원본에 없어 비어 있는 항목(보완 대상)
+    unverified: int  # 원본과 대조되지 않아 사람의 확인이 필요한 값
+    human: int  # 사람이 채우거나 고친 항목
+
+
+class RecordSummary(BaseModel):
+    id: uuid.UUID
+    code: str | None
+    title: str
+    status: str  # draft | published
+    counts: RecordCounts
+
+
+class ArtifactOut(BaseModel):
+    id: uuid.UUID
+    filename: str
+    kind: str
+    size_bytes: int
+    char_count: int
+    title: str
+    performed_on: date | None
+    # processing | needs_template | needs_confirm | review | published
+    state: str
+    match_state: str  # none | proposed | confirmed
+    template: DocumentRef | None
+    match_confidence: int | None
+    candidates: list[MatchCandidateOut]
+    record: RecordSummary | None
+    run: RunOut | None
+    created_at: datetime
+    actions: list[str]  # match | set_template | delete
+
+
+class SegmentOut(BaseModel):
+    loc: str
+    text: str
+
+
+class ArtifactDetail(ArtifactOut):
+    segments: list[SegmentOut]
+
+
+class ArtifactTemplateIn(BaseModel):
+    document_id: uuid.UUID
+
+
+class RecordField(BaseModel):
+    name: str
+    value: str
+    source: Literal["artifact", "human", "empty"]
+    quote: str  # 값의 근거가 되는 원본 구절
+    location: str  # 그 구절의 위치(쪽, 문단 …)
+    verified: bool  # 구절이 실제로 원본에 있는지 코드가 확인했는가
+    needs_check: bool  # 사람이 확인해야 발행할 수 있는 값인가
+    original_value: str | None  # 사람이 고치기 전에 원본에서 옮겼던 값
+    filled_by: UserRef | None
+    filled_at: datetime | None
+    confirmed_by: UserRef | None
+
+
+class RecordOut(BaseModel):
+    id: uuid.UUID
+    code: str | None  # 발행할 때 발급한다
+    title: str
+    status: str
+    legacy: bool
+    performed_on: date | None
+    template: DocumentRef
+    template_version: str
+    template_approved: bool
+    artifact_id: uuid.UUID | None
+    artifact_filename: str | None
+    fields: list[RecordField]
+    counts: RecordCounts
+    generated_by: str | None
+    created_at: datetime
+    published_at: datetime | None
+    published_by: UserRef | None
+    actions: list[str]  # edit | publish
+
+
+class RecordFieldIn(BaseModel):
+    name: str
+    value: str = Field(max_length=10_000)
+
+
+class RecordPatch(BaseModel):
+    title: str | None = Field(default=None, max_length=300)
+    performed_on: date | None = None
+    fields: list[RecordFieldIn] = []
+    # 원본과 대조되지 않은 값을, 원본을 보고 맞다고 확인한 항목
+    confirm: list[str] = []
 
 
 # ── 표준 커버리지 ────────────────────────────────────────────────────────────

@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from app import generation_jobs
+from app import generation_jobs, harmonize_jobs
 from app.config import get_settings
 from app.db import get_engine, get_sessionmaker, set_tenant
 from app.extract.structure import Clause
@@ -168,6 +168,7 @@ _HANDLERS = {
     "mine_requirements": run_mining,
     "design_system": generation_jobs.run_design,
     "write_documents": generation_jobs.run_write,
+    "harmonize_artifact": harmonize_jobs.run_harmonize,
 }
 
 

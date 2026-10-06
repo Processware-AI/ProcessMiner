@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app import worker
-from app.api import auth, build, documents, sources, tenants
+from app.api import auth, build, documents, records, sources, tenants
 from app.config import get_settings
 
 
@@ -23,6 +23,7 @@ app.include_router(tenants.router)
 app.include_router(documents.router)
 app.include_router(sources.router)
 app.include_router(build.router)
+app.include_router(records.router)
 
 
 @app.get("/api/health", tags=["meta"])

@@ -23,10 +23,12 @@ SYSTEM_ROLES = ("process_owner", "executor", "auditor", "qmr", "admin", "viewer"
 # 체계 범위 역할별 허용 행위
 # basis.*: 체계의 근거(적용요건)를 고르고 승인한다. plan.manage: 요건에서 문서를 생성한다.
 # doc.tailor: 상위 체계에서 물려받은 문서를 재정의하거나 제외한다.
+# record.manage: 산출물을 올려 기록으로 정리하고 발행한다(업무를 수행하는 사람도 한다).
 _OWNER_ACTIONS = frozenset(
     {
         "doc.create",
         "doc.tailor",
+        "record.manage",
         "doc.edit",
         "doc.submit",
         "doc.review",
@@ -39,7 +41,7 @@ _ROLE_ACTIONS: dict[str, frozenset[str]] = {
     "admin": _OWNER_ACTIONS,
     "process_owner": _OWNER_ACTIONS,
     "qmr": frozenset({"doc.review", "basis.approve"}),
-    "executor": frozenset(),
+    "executor": frozenset({"record.manage"}),
     "auditor": frozenset(),
     "viewer": frozenset(),
 }

@@ -2,6 +2,7 @@
 
 import {
   ChevronRightIcon,
+  ClipboardCheckIcon,
   FileTextIcon,
   ListChecksIcon,
   PencilLineIcon,
@@ -156,6 +157,10 @@ export default function LibraryPage() {
         description={systemQuery.data?.description || undefined}
         actions={
           <>
+            <LinkButton variant="outline" href={routes.records(tenant, system)}>
+              <ClipboardCheckIcon />
+              기록
+            </LinkButton>
             <LinkButton variant="outline" href={routes.coverage(tenant, system)}>
               <ListChecksIcon />
               표준 커버리지
