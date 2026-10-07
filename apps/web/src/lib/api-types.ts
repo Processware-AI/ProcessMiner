@@ -362,6 +362,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/t/{tenant_slug}/systems/{system_slug}/examples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Examples
+         * @description 작성예시가 없는 양식과, 작성예시 만들기 작업의 진행 상황.
+         */
+        get: operations["get_examples_api_t__tenant_slug__systems__system_slug__examples_get"];
+        put?: never;
+        /**
+         * Start Examples
+         * @description 작성예시가 없는 양식마다 AI 가 작성예시를 쓴다. 작업은 대기열에 들어간다.
+         */
+        post: operations["start_examples_api_t__tenant_slug__systems__system_slug__examples_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/t/{tenant_slug}/systems/{system_slug}/tailoring/{document_id}/override": {
         parameters: {
             query?: never;
@@ -1690,6 +1714,8 @@ export interface components {
         /** DocumentDetail */
         DocumentDetail: {
             document: components["schemas"]["DocumentSummary"];
+            example_of?: components["schemas"]["DocumentRef"] | null;
+            example?: components["schemas"]["DocumentRef"] | null;
             tailoring: components["schemas"]["TailoringInfo"];
             system: components["schemas"]["SystemOut"];
             /** Ancestors */
@@ -1798,6 +1824,12 @@ export interface components {
              * @default false
              */
             base_changed: boolean;
+        };
+        /** ExamplesOut */
+        ExamplesOut: {
+            run: components["schemas"]["RunOut"] | null;
+            /** Missing */
+            missing: components["schemas"]["DocumentRef"][];
         };
         /** ExclusionIn */
         ExclusionIn: {
@@ -3682,6 +3714,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_examples_api_t__tenant_slug__systems__system_slug__examples_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamplesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_examples_api_t__tenant_slug__systems__system_slug__examples_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExamplesOut"];
                 };
             };
             /** @description Validation Error */

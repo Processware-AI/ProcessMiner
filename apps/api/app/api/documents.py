@@ -25,6 +25,7 @@ from app.schemas import (
     DocumentIn,
     DocumentRef,
     DocumentSummary,
+    ExamplesOut,
     InboxItem,
     ReviewIn,
     RevisionMeta,
@@ -40,6 +41,7 @@ from app.schemas import (
 )
 from app.services import decisions as decision_svc
 from app.services import documents as svc
+from app.services import examples as example_svc
 from app.services import tailoring
 
 router = APIRouter(prefix="/api", tags=["documents"], route_class=CommitRoute)
@@ -150,8 +152,22 @@ def _detail(ctx: TenantContext, doc: Document, via: ProcessSystem | None = None)
         tailoring_actions = ["ack_base"]
     base_home = db.get(ProcessSystem, entry.base.system_id) if entry.base is not None else None
 
+    example_of = example = None
+    working = opened or approved
+    if doc.doc_type == "EX" and working is not None and working.structured.get("example_of"):
+        form = db.get(Document, uuid.UUID(working.structured["example_of"]))
+        example_of = _ref(form) if form else None
+    elif doc.doc_type == "TMP":
+        for sibling in children_of_parent(db, doc):
+            revision = svc.open_revision(db, sibling.id) or svc.approved_revision(db, sibling.id)
+            if revision is not None and revision.structured.get("example_of") == str(doc.id):
+                example = _ref(sibling)
+                break
+
     return DocumentDetail(
         document=summaries[doc.id],
+        example_of=example_of,
+        example=example,
         tailoring=TailoringInfo(
             state=entry.state,
             view_system=SystemRef(slug=view.slug, name=view.name),
@@ -171,6 +187,43 @@ def _detail(ctx: TenantContext, doc: Document, via: ProcessSystem | None = None)
         approved=svc.to_out(db, approved),
         open=svc.to_out(db, opened),
         actions=actions,
+    )
+
+
+def children_of_parent(db: Session, doc: Document) -> list[Document]:
+    """같은 지침 아래의 작성예시들."""
+    if doc.parent_id is None:
+        return []
+    return list(
+        db.scalars(
+            select(Document).where(Document.parent_id == doc.parent_id, Document.doc_type == "EX")
+        )
+    )
+
+
+# ── 작성예시 ─────────────────────────────────────────────────────────────────
+
+
+@router.get("/t/{tenant_slug}/systems/{system_slug}/examples", response_model=ExamplesOut)
+def get_examples(system_slug: str, ctx: TenantContext = Depends(tenant_context)) -> ExamplesOut:
+    """작성예시가 없는 양식과, 작성예시 만들기 작업의 진행 상황."""
+    system = ctx.system_by_slug(system_slug)
+    ctx.require("doc.read", system.id)
+    return ExamplesOut(
+        run=_run_out(ctx.db, example_svc.latest_run(ctx.db, system.id)),
+        missing=[_ref(form) for form, _ in example_svc.missing(ctx.db, system)],
+    )
+
+
+@router.post("/t/{tenant_slug}/systems/{system_slug}/examples", response_model=ExamplesOut)
+def start_examples(system_slug: str, ctx: TenantContext = Depends(tenant_context)) -> ExamplesOut:
+    """작성예시가 없는 양식마다 AI 가 작성예시를 쓴다. 작업은 대기열에 들어간다."""
+    system = ctx.system_by_slug(system_slug)
+    ctx.require("doc.create", system.id)
+    run = example_svc.start(ctx.db, system=system, actor_id=ctx.user.id)
+    return ExamplesOut(
+        run=_run_out(ctx.db, run),
+        missing=[_ref(form) for form, _ in example_svc.missing(ctx.db, system)],
     )
 
 

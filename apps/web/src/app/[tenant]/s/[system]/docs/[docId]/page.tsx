@@ -327,6 +327,43 @@ function DocumentScreen({
             revision={typeof view === "object" ? historical.data : view === "compare" ? open : shown}
           />
 
+          <RailSection title="상위 문서">
+            {detail.ancestors.length === 0 ? (
+              <p className="text-muted-foreground">없음 (최상위 문서)</p>
+            ) : (
+              <ul className="space-y-1">
+                {detail.ancestors.map((ancestor, index) => (
+                  <li key={ancestor.id} style={{ paddingLeft: `${index * 0.75}rem` }}>
+                    <Link
+                      href={routes.document(tenant, system, ancestor.id)}
+                      className="-mx-1.5 flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-muted"
+                      title={ancestor.code}
+                    >
+                      <TypeBadge type={ancestor.doc_type} />
+                      <span className="min-w-0 flex-1 truncate">{ancestor.title}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </RailSection>
+
+          {(detail.example_of || detail.example) && (
+            <RailSection title={detail.example_of ? "이 예시의 양식" : "작성예시"}>
+              {[detail.example_of ?? detail.example!].map((related) => (
+                <Link
+                  key={related.id}
+                  href={routes.document(tenant, system, related.id)}
+                  className="-mx-1.5 flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-muted"
+                  title={related.code}
+                >
+                  <TypeBadge type={related.doc_type} />
+                  <span className="min-w-0 flex-1 truncate">{related.title}</span>
+                </Link>
+              ))}
+            </RailSection>
+          )}
+
           <RailSection
             title="하위 문서"
             action={

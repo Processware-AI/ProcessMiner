@@ -30,6 +30,7 @@ export const keys = {
   decisions: (tenant: string, system: string) => ["t", tenant, "docs", "decisions", system] as const,
   coverage: (tenant: string, system: string) => ["t", tenant, "docs", "coverage", system] as const,
   recordsAll: (tenant: string) => ["t", tenant, "records"] as const,
+  examples: (tenant: string, system: string) => ["t", tenant, "docs", "examples", system] as const,
   artifacts: (tenant: string, system: string) => ["t", tenant, "records", "artifacts", system] as const,
   artifact: (tenant: string, id: string) => ["t", tenant, "records", "artifact", id] as const,
   records: (tenant: string, system: string) => ["t", tenant, "records", "list", system] as const,
@@ -232,6 +233,19 @@ export function useCoverage(
           },
         }),
       ),
+  });
+}
+
+export function useExamples(tenant: string, system: string) {
+  return useQuery({
+    queryKey: keys.examples(tenant, system),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/t/{tenant_slug}/systems/{system_slug}/examples", {
+          params: { path: { tenant_slug: tenant, system_slug: system } },
+        }),
+      ),
+    refetchInterval: (query) => (isBusy(query.state.data?.run?.status) ? 2500 : false),
   });
 }
 
