@@ -89,3 +89,39 @@ test("초안의 정할 항목을 채우고 여러 건을 한 번에 검토 요�
   await expect(page.getByText("이 정책은 연 1회마다 검토한다.")).toBeVisible();
   await expect(page.getByText("승인v1.0").first()).toBeVisible();
 });
+
+// 검토 요청 단계를 건너뛰고 초안을 바로 승인한다. 작성자·검토자 분리를 끈 회사에서 작성자가 직접 한다.
+test("검토 없이 초안을 한 번에 승인한다", async ({ page }) => {
+  const tag = unique();
+  const consultant = `consultant-${tag}@e2e.example`;
+  const tenant = `e2e-${tag}`;
+  created.push(tenant);
+  createConsultant(consultant, "김컨설턴트");
+
+  await login(page, consultant);
+  const api = (path: string, data: unknown) => page.request.post(`/api${path}`, { data });
+  expect((await api("/tenants", { slug: tenant, name: "승인 주식회사" })).status()).toBe(201);
+  const orgUnits = await (await page.request.get(`/api/t/${tenant}/org-units`)).json();
+  await api(`/t/${tenant}/systems`, { slug: "ims", name: "통합경영체계", org_unit_id: orgUnits[0].id });
+  const policy = await draft(page, tenant, { doc_type: "POL", title: "문서 관리 정책", scope_code: "QMS" }, "내용");
+  await draft(page, tenant, { doc_type: "PRO", title: "문서 관리 절차", parent_id: policy }, "내용");
+
+  // 작성자 본인이므로 분리 규칙이 켜져 있으면 승인되지 않는다.
+  await page.goto(`/${tenant}/s/ims`);
+  await page.getByRole("button", { name: "검토 없이 2건 승인" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "2건 승인" }).click();
+  await expect(dialog.getByText("0건 승인 완료, 2건은 하지 못했습니다")).toBeVisible();
+  await expect(dialog.getByText("작성자는 자기 개정판을 검토할 수 없습니다.").first()).toBeVisible();
+  await dialog.getByRole("button", { name: "닫기" }).first().click();
+
+  await page.request.patch(`/api/t/${tenant}`, { data: { four_eyes: false } });
+  await page.reload();
+  await page.getByRole("button", { name: "검토 없이 2건 승인" }).click();
+  await dialog.getByLabel("검토 의견").fill("초기 기준선 일괄 승인");
+  await page.screenshot(shot("04-fast-approve"));
+  await dialog.getByRole("button", { name: "2건 승인" }).click();
+  await expect(dialog.getByText("2건 승인 완료")).toBeVisible();
+  await dialog.getByRole("button", { name: "닫기" }).first().click();
+  await expect(page.getByText("승인v1.0")).toHaveCount(2);
+});

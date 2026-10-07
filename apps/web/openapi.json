@@ -2177,6 +2177,108 @@
         }
       }
     },
+    "/api/t/{tenant_slug}/systems/{system_slug}/decisions/ai": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Get Ai Decisions",
+        "description": "'AI 로 채우기' 작업의 진행 상황과, 초안에 모델이 채운 값.",
+        "operationId": "get_ai_decisions_api_t__tenant_slug__systems__system_slug__decisions_ai_get",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionAiOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Start Ai Decisions",
+        "description": "남은 항목을 모델이 모두 채운다. 작업은 대기열에 들어간다.",
+        "operationId": "start_ai_decisions_api_t__tenant_slug__systems__system_slug__decisions_ai_post",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionAiOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/t/{tenant_slug}/inbox": {
       "get": {
         "tags": [
@@ -4353,6 +4455,51 @@
   },
   "components": {
     "schemas": {
+      "AiDecision": {
+        "properties": {
+          "revision_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Revision Id"
+          },
+          "document": {
+            "$ref": "#/components/schemas/DocumentRef"
+          },
+          "section_title": {
+            "type": "string",
+            "title": "Section Title"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale"
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Decided At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "revision_id",
+          "document",
+          "section_title",
+          "label",
+          "value",
+          "rationale",
+          "decided_at"
+        ],
+        "title": "AiDecision",
+        "description": "모델이 채운 값 하나. 사람이 검토할 수 있게 근거와 함께 보여준다."
+      },
       "ArtifactDetail": {
         "properties": {
           "id": {
@@ -4965,7 +5112,8 @@
             "type": "string",
             "enum": [
               "submit",
-              "approve"
+              "approve",
+              "approve_draft"
             ],
             "title": "Action"
           },
@@ -5535,6 +5683,33 @@
           "requirements"
         ],
         "title": "CoverageSource"
+      },
+      "DecisionAiOut": {
+        "properties": {
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "filled": {
+            "items": {
+              "$ref": "#/components/schemas/AiDecision"
+            },
+            "type": "array",
+            "title": "Filled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run",
+          "filled"
+        ],
+        "title": "DecisionAiOut"
       },
       "DecisionFillIn": {
         "properties": {

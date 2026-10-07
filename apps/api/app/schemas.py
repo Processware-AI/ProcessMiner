@@ -359,7 +359,8 @@ class ReviewIn(BaseModel):
 class BatchReviewIn(BaseModel):
     """여러 개정판을 한 번에 검토 요청하거나 승인한다."""
 
-    action: Literal["submit", "approve"]
+    # approve_draft: 검토 요청 단계를 건너뛰고 초안을 바로 승인한다(작성자·검토자 분리는 그대로).
+    action: Literal["submit", "approve", "approve_draft"]
     revision_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
     comment: str = ""
 
@@ -403,6 +404,23 @@ class DecisionFillIn(BaseModel):
     value: str = Field(min_length=1, max_length=2000)
     # 채울 곳. 비우면 이 체계의 초안 전체에서 같은 이름의 항목을 모두 채운다.
     targets: list[DecisionTarget] | None = None
+
+
+class AiDecision(BaseModel):
+    """모델이 채운 값 하나. 사람이 검토할 수 있게 근거와 함께 보여준다."""
+
+    revision_id: uuid.UUID
+    document: DocumentRef
+    section_title: str
+    label: str
+    value: str
+    rationale: str
+    decided_at: datetime
+
+
+class DecisionAiOut(BaseModel):
+    run: "RunOut | None"  # 가장 최근의 'AI 로 채우기' 작업
+    filled: list[AiDecision]  # 아직 초안인 문서에 모델이 채운 값
 
 
 class DecisionFillOut(BaseModel):

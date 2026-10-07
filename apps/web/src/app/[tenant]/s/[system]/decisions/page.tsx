@@ -1,18 +1,26 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2Icon, ChevronLeftIcon, SearchIcon } from "lucide-react";
+import { CheckCircle2Icon, ChevronLeftIcon, SearchIcon, SparklesIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { type FormEvent, Suspense, useMemo, useState } from "react";
+import { type FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { DocCode, EmptyState, ErrorState, LinkButton, TypeBadge } from "@/components/bits";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, type DecisionGroup, type DecisionOccurrence, unwrap } from "@/lib/api";
-import { keys, useDecisions, useSystem } from "@/lib/queries";
+import { keys, useAiDecisions, useDecisions, useSystem } from "@/lib/queries";
 import { routes } from "@/lib/routes";
 
 type Target = { revision_id: string; section_key: string };
@@ -98,6 +106,13 @@ function Decisions() {
           검토를 요청할 수 없습니다.
         </p>
       </div>
+
+      <AiFill
+        tenant={tenant}
+        system={system}
+        remaining={totals.places}
+        canFill={canFill}
+      />
 
       {decisions.isPending && <Skeleton className="h-48" />}
       {decisions.error && <ErrorState error={decisions.error} />}
@@ -268,5 +283,155 @@ function FillForm({
         {submitLabel}
       </Button>
     </form>
+  );
+}
+
+/**
+ * AI 로 남은 항목을 한꺼번에 채운다. 모델이 정한 값은 문서에 들어가고, 무엇을 왜 그렇게 정했는지
+ * 목록으로 남아 사람이 검토할 수 있다(문서가 승인되기 전까지 보인다).
+ */
+function AiFill({
+  tenant,
+  system,
+  remaining,
+  canFill,
+}: {
+  tenant: string;
+  system: string;
+  remaining: number;
+  canFill: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const state = useAiDecisions(tenant, system);
+  const [confirming, setConfirming] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const run = state.data?.run;
+  const busy = run?.status === "queued" || run?.status === "running";
+  const filled = state.data?.filled ?? [];
+  const progress = run?.progress as { done?: number; failed?: number; total?: number } | undefined;
+
+  // 작업이 끝나면 남은 항목과 문서 목록도 새로 받아온다.
+  const signature = `${run?.id}:${run?.status}:${progress?.done ?? 0}`;
+  useEffect(() => {
+    void queryClient.invalidateQueries({ queryKey: keys.decisions(tenant, system), exact: true });
+    void queryClient.invalidateQueries({ queryKey: keys.documents(tenant, system) });
+  }, [queryClient, tenant, system, signature]);
+
+  const start = useMutation({
+    mutationFn: () =>
+      unwrap(
+        api.POST("/api/t/{tenant_slug}/systems/{system_slug}/decisions/ai", {
+          params: { path: { tenant_slug: tenant, system_slug: system } },
+        }),
+      ),
+    onSuccess: async () => {
+      setConfirming(false);
+      await queryClient.invalidateQueries({ queryKey: keys.decisions(tenant, system) });
+    },
+  });
+
+  if (!busy && remaining === 0 && filled.length === 0) return null;
+  const shown = showAll ? filled : filled.slice(0, 12);
+
+  return (
+    <section className="space-y-3 rounded-xl border border-violet-500/25 bg-violet-500/5 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <p className="min-w-0 flex-1 basis-64 text-sm text-pretty">
+          <SparklesIcon className="mr-1.5 inline size-4 align-[-3px] text-violet-600 dark:text-violet-300" />
+          {busy
+            ? progress?.total
+              ? `AI 가 채우고 있습니다 — ${progress.total}곳 가운데 ${(progress.done ?? 0) + (progress.failed ?? 0)}곳 처리`
+              : "AI 가 채울 준비를 하고 있습니다"
+            : remaining > 0
+              ? `남은 ${remaining}곳을 AI 가 업계에서 흔히 쓰는 값으로 한꺼번에 채울 수 있습니다. 채운 값과 근거는 아래에 남아 검토할 수 있습니다.`
+              : `AI 가 채운 값 ${filled.length}곳이 있습니다. 문서를 승인하기 전에 검토하세요.`}
+        </p>
+        {canFill && remaining > 0 && !busy && (
+          <Button size="sm" onClick={() => setConfirming(true)}>
+            <SparklesIcon />
+            AI 로 모두 채우기
+          </Button>
+        )}
+      </div>
+      {busy && (progress?.total ?? 0) > 0 && (
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-violet-500 transition-[width] duration-500"
+            style={{
+              width: `${Math.max((((progress?.done ?? 0) + (progress?.failed ?? 0)) / (progress?.total ?? 1)) * 100, 3)}%`,
+            }}
+          />
+        </div>
+      )}
+      {!busy && run?.status === "failed" && (
+        <p className="text-sm text-destructive">채우지 못했습니다: {run.error}</p>
+      )}
+      {!busy && run?.status === "succeeded" && (progress?.failed ?? 0) > 0 && (
+        <p className="text-sm text-amber-700 dark:text-amber-300">
+          {progress?.failed}곳은 채우지 못했습니다. 아래 목록에서 직접 채우거나 다시 실행하세요.
+        </p>
+      )}
+
+      {filled.length > 0 && (
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
+          <p className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
+            AI 가 채운 값 {filled.length}곳 · 문서를 승인하기 전까지 여기에 남습니다. 고치려면 문서를
+            열어 본문을 수정하세요.
+          </p>
+          <ul className="divide-y divide-border">
+            {shown.map((item, index) => (
+              <li key={`${item.revision_id}:${index}`} className="grid gap-x-4 gap-y-0.5 px-3 py-2 text-sm sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{item.label}</span>
+                  <Link
+                    href={routes.document(tenant, system, item.document.id)}
+                    className="block truncate text-xs text-muted-foreground hover:underline"
+                  >
+                    {item.document.code} · {item.section_title}
+                  </Link>
+                </span>
+                <span className="min-w-0">
+                  <span className="block break-words">{item.value}</span>
+                  {item.rationale && (
+                    <span className="block text-xs text-muted-foreground text-pretty">{item.rationale}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {filled.length > shown.length && (
+            <button
+              type="button"
+              onClick={() => setShowAll(true)}
+              className="w-full border-t border-border px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50"
+            >
+              {filled.length - shown.length}곳 더 보기
+            </button>
+          )}
+        </div>
+      )}
+
+      <Dialog open={confirming} onOpenChange={setConfirming}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>AI 로 모두 채우기</DialogTitle>
+            <DialogDescription>
+              남은 {remaining}곳에 들어갈 값을 AI 가 정해 문서 본문에 바로 넣습니다. 처음 운영하는
+              조직이 지킬 수 있는 일반적인 값(주기, 기한, 담당 역할, 기준값 등)으로 정하고, 이 체계에서
+              사람이 이미 정한 값은 그대로 따릅니다. 문서 내용과 위치가 AI 모델로 전송됩니다. 정한 값은
+              회사의 실제 운영과 맞는지 검토가 필요합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirming(false)}>
+              취소
+            </Button>
+            <Button disabled={start.isPending} onClick={() => start.mutate()}>
+              채우기 시작
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
   );
 }

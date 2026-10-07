@@ -235,6 +235,19 @@ export function useCoverage(
   });
 }
 
+export function useAiDecisions(tenant: string, system: string) {
+  return useQuery({
+    queryKey: [...keys.decisions(tenant, system), "ai"],
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/t/{tenant_slug}/systems/{system_slug}/decisions/ai", {
+          params: { path: { tenant_slug: tenant, system_slug: system } },
+        }),
+      ),
+    refetchInterval: (query) => (isBusy(query.state.data?.run?.status) ? 2000 : false),
+  });
+}
+
 export function useDecisions(tenant: string, system: string) {
   return useQuery({
     queryKey: keys.decisions(tenant, system),

@@ -551,7 +551,9 @@ def approve(
     actor_id: uuid.UUID,
     comment: str,
     tenant: Tenant,
+    skipped_review: bool = False,
 ) -> DocumentRevision:
+    """승인한다. skipped_review 는 검토 요청 단계 없이 초안에서 바로 승인했다는 표시(감사 기록)."""
     doc = get_document(db, revision.document_id)
     new_status = _transition(revision, "approve")
     _check_four_eyes(revision, actor_id, tenant)
@@ -582,8 +584,9 @@ def approve(
     revision.approved_at = now
     doc.title = revision.title
     db.flush()
+    extra = {"skipped_review": True} if skipped_review else {}
     _audit_revision(
-        db, doc, revision, actor_id, "revision.approve", content_hash=revision.content_hash
+        db, doc, revision, actor_id, "revision.approve", content_hash=revision.content_hash, **extra
     )
     return revision
 

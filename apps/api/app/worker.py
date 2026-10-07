@@ -20,6 +20,7 @@ from app.extract.structure import Clause
 from app.llm import LLMError
 from app.models import Requirement, Run, RunEvent, SourceClause, SourceDocument
 from app.pipelines import mining
+from app.services import decisions
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +170,7 @@ _HANDLERS = {
     "design_system": generation_jobs.run_design,
     "write_documents": generation_jobs.run_write,
     "harmonize_artifact": harmonize_jobs.run_harmonize,
+    "fill_decisions": decisions.run_ai_fill,
 }
 
 

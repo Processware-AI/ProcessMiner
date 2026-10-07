@@ -63,6 +63,7 @@ def content_hash(title: str, sections: list[dict[str, Any]], structured: dict[st
 
 # 조직이 스스로 정해야 하는 곳의 표시: 〔조직 결정: 검토 주기〕
 _DECISION = re.compile(r"〔조직 결정:\s*([^〕\n]*?)\s*〕")
+DECISION_PATTERN = _DECISION
 _CONTEXT = 140  # 앞뒤로 보여줄 글자 수
 
 

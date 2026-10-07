@@ -7,14 +7,18 @@
 """
 
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.domain import revisions as rev
 from app.errors import api_error
-from app.models import Document, DocumentRevision, ProcessSystem
+from app.llm import LLMError
+from app.models import Document, DocumentRevision, ProcessSystem, Run, RunEvent, Tenant
+from app.pipelines import decide
 from app.schemas import DecisionGroup, DecisionOccurrence, DocumentRef
 from app.services import audit
 
@@ -119,3 +123,227 @@ def fill(
         },
     )
     return places, len(codes)
+
+
+# ── AI 로 한꺼번에 채우기 ────────────────────────────────────────────────────
+
+AI_RUN_KIND = "fill_decisions"
+_BATCH = 40  # 한 번의 모델 호출로 채우는 자리 수(문서 단위로 묶는다)
+
+
+def _occurrence_id(revision_id: uuid.UUID, section_key: str, index: int) -> str:
+    return f"{revision_id}|{section_key}|{index}"
+
+
+def latest_ai_run(db: Session, system_id: uuid.UUID) -> Run | None:
+    return db.scalar(
+        select(Run)
+        .where(Run.kind == AI_RUN_KIND, Run.progress["system_id"].astext == str(system_id))
+        .order_by(Run.created_at.desc())
+        .limit(1)
+    )
+
+
+def start_ai_fill(db: Session, *, system: ProcessSystem, actor_id: uuid.UUID) -> Run:
+    """이 체계의 초안에 남은 항목을 모델이 모두 채우도록 작업을 건다."""
+    run = latest_ai_run(db, system.id)
+    if run is not None and run.status in ("queued", "running"):
+        raise api_error(409, "run_in_progress", "이미 채우고 있습니다.")
+    if not list_groups(db, system.id):
+        raise api_error(409, "nothing_to_fill", "채울 항목이 남아 있지 않습니다.")
+    run = Run(
+        tenant_id=system.tenant_id,
+        kind=AI_RUN_KIND,
+        status="queued",
+        progress={"system_id": str(system.id)},
+        started_by=actor_id,
+    )
+    db.add(run)
+    db.flush()
+    audit.record(
+        db,
+        tenant_id=system.tenant_id,
+        actor_id=actor_id,
+        action="decision.ai_fill",
+        entity_type="system",
+        entity_id=system.id,
+        data={"system": system.slug},
+    )
+    return run
+
+
+def _blanks(revision: DocumentRevision, doc: Document) -> list[decide.Blank]:
+    blanks = []
+    for section in revision.sections:
+        for index, found in enumerate(rev.find_decisions(section.get("body_md") or "")):
+            blanks.append(
+                decide.Blank(
+                    id=_occurrence_id(revision.id, section["key"], index),
+                    label=found.label,
+                    document=f"{doc.code} {doc.title}",
+                    section=section["title"],
+                    before=found.before,
+                    after=found.after,
+                )
+            )
+    return blanks
+
+
+def _apply(
+    revision: DocumentRevision,
+    decided: dict[str, decide.Decided],
+    expected: dict[str, str],
+    model: str,
+) -> int:
+    """한 개정판의 자리들을 채운다. 그사이 본문이 바뀌어 자리가 맞지 않으면 그 자리는 건너뛴다."""
+    now = datetime.now(UTC).isoformat()
+    sections, records = [], []
+    filled = 0
+    for section in revision.sections:
+        key = section["key"]
+        position = -1
+
+        def replace(match, key=key):
+            nonlocal position, filled
+            position += 1
+            occurrence = _occurrence_id(revision.id, key, position)
+            item = decided.get(occurrence)
+            if item is None or expected.get(occurrence) != match.group(1):
+                return match.group(0)
+            filled += 1
+            records.append(
+                {
+                    "section_key": key,
+                    "label": match.group(1),
+                    "value": item.value,
+                    "decided_by": None,
+                    "by": "ai",
+                    "model": model,
+                    "rationale": item.rationale.strip(),
+                    "decided_at": now,
+                }
+            )
+            return item.value
+
+        body = rev.DECISION_PATTERN.sub(replace, section.get("body_md") or "")
+        sections.append({**section, "body_md": body})
+    if filled:
+        revision.sections = sections
+        revision.structured = {
+            **revision.structured,
+            "decisions": [*revision.structured.get("decisions", []), *records],
+        }
+    return filled
+
+
+def _log(db: Session, run: Run, message: str) -> None:
+    db.add(RunEvent(tenant_id=run.tenant_id, run_id=run.id, level="info", message=message))
+
+
+def run_ai_fill(db: Session, run: Run) -> None:
+    """작업자가 부른다. 문서 단위로 묶어 모델에 묻고, 묶음이 끝날 때마다 반영한다."""
+    system = db.get(ProcessSystem, uuid.UUID(run.progress["system_id"]))
+    tenant = db.get(Tenant, system.tenant_id)
+    drafts = [(r, d, _blanks(r, d)) for r, d in _drafts(db, system.id)]
+    drafts = [item for item in drafts if item[2]]
+    total = sum(len(blanks) for _, _, blanks in drafts)
+
+    # 이 체계에서 사람이 이미 정한 값은 일관되게 쓰도록 보여준다.
+    known: dict[str, str] = {}
+    for revision in db.scalars(
+        select(DocumentRevision)
+        .join(Document, Document.id == DocumentRevision.document_id)
+        .where(Document.system_id == system.id)
+    ):
+        for record in revision.structured.get("decisions", []):
+            if record.get("by") != "ai":
+                known.setdefault(record["label"], record["value"])
+
+    batches: list[list] = [[]]
+    for item in drafts:
+        size = sum(len(blanks) for _, _, blanks in batches[-1])
+        if batches[-1] and size + len(item[2]) > _BATCH:
+            batches.append([])
+        batches[-1].append(item)
+    progress = {**run.progress, "total": total, "done": 0, "failed": 0}
+    progress.update(input_tokens=0, output_tokens=0)
+    run.progress = dict(progress)
+    _log(db, run, f"문서 {len(drafts)}건의 {total}곳을 채웁니다")
+    db.commit()
+
+    context = f"회사: {tenant.name}\n체계: {system.name}"
+    if system.description:
+        context += f" — {system.description}"
+    errors: list[str] = []
+    with ThreadPoolExecutor(max_workers=max(1, get_settings().llm_concurrency)) as pool:
+        futures = {
+            pool.submit(
+                decide.decide, [b for _, _, blanks in batch for b in blanks], context, known
+            ): batch
+            for batch in batches
+            if batch
+        }
+        for future in as_completed(futures):
+            batch = futures[future]
+            try:
+                decided, result = future.result()
+            except LLMError as exc:
+                errors.append(str(exc))
+                progress["failed"] += sum(len(blanks) for _, _, blanks in batch)
+            else:
+                progress["input_tokens"] += result.input_tokens
+                progress["output_tokens"] += result.output_tokens
+                for revision, _doc, blanks in batch:
+                    db.refresh(revision)
+                    if revision.status != rev.DRAFT:
+                        progress["failed"] += len(blanks)
+                        continue
+                    expected = {b.id: b.label for b in blanks}
+                    filled = _apply(revision, decided, expected, result.model)
+                    progress["done"] += filled
+                    progress["failed"] += len(blanks) - filled
+            run.progress = dict(progress)
+            db.commit()
+
+    run.finished_at = datetime.now(UTC)
+    if progress["done"] == 0:
+        run.status = "failed"
+        run.error = errors[0] if errors else "채운 곳이 없습니다."
+    else:
+        run.status = "succeeded"
+        message = f"{progress['done']}곳을 채웠습니다"
+        if progress["failed"]:
+            message += f" ({progress['failed']}곳은 채우지 못했습니다)"
+        _log(db, run, message)
+    audit.record(
+        db,
+        tenant_id=system.tenant_id,
+        actor_id=run.started_by,
+        action="decision.ai_filled",
+        entity_type="system",
+        entity_id=system.id,
+        data={"system": system.slug, "places": progress["done"], "failed": progress["failed"]},
+    )
+    db.commit()
+
+
+def ai_filled(db: Session, system_id: uuid.UUID) -> list[dict]:
+    """초안에 모델이 채운 값. 사람이 검토할 수 있게 문서·자리·근거와 함께 돌려준다."""
+    rows = []
+    for revision, doc in _drafts(db, system_id):
+        titles = {s["key"]: s["title"] for s in revision.sections}
+        ref = DocumentRef(id=doc.id, code=doc.code, title=doc.title, doc_type=doc.doc_type)
+        for record in revision.structured.get("decisions", []):
+            if record.get("by") == "ai":
+                rows.append(
+                    {
+                        "revision_id": revision.id,
+                        "document": ref,
+                        "section_title": titles.get(record["section_key"], record["section_key"]),
+                        "label": record["label"],
+                        "value": record["value"],
+                        "rationale": record.get("rationale", ""),
+                        "decided_at": record["decided_at"],
+                    }
+                )
+    return rows

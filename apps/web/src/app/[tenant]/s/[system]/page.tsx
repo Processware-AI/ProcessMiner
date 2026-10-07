@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CheckCheckIcon,
   ChevronRightIcon,
   ClipboardCheckIcon,
   FileTextIcon,
@@ -82,6 +83,9 @@ export default function LibraryPage() {
 
   const canCreate = systemQuery.data?.actions.includes("doc.create") ?? false;
   const canSubmit = systemQuery.data?.actions.includes("doc.submit") ?? false;
+  // 검토 요청을 건너뛰고 바로 승인하려면 요청과 검토를 모두 할 수 있어야 한다.
+  const canFastApprove = canSubmit && (systemQuery.data?.actions.includes("doc.review") ?? false);
+  const [fastApproving, setFastApproving] = useState(false);
   const parentSystem = systems.data?.find((s) => s.id === systemQuery.data?.parent_system_id);
   const parentTypes = useMemo(
     () => new Set((docTypes.data ?? []).map((t) => t.parent_type).filter(Boolean)),
@@ -245,9 +249,15 @@ export default function LibraryPage() {
             </LinkButton>
           )}
           {canSubmit && drafts.ready.length > 0 && (
-            <Button size="sm" onClick={() => setSubmitting(true)}>
+            <Button size="sm" variant={canFastApprove ? "outline" : "default"} onClick={() => setSubmitting(true)}>
               <SendIcon />
               {drafts.ready.length}건 검토 요청
+            </Button>
+          )}
+          {canFastApprove && drafts.ready.length > 0 && (
+            <Button size="sm" onClick={() => setFastApproving(true)}>
+              <CheckCheckIcon />
+              검토 없이 {drafts.ready.length}건 승인
             </Button>
           )}
         </div>
@@ -391,6 +401,22 @@ export default function LibraryPage() {
             정할 항목이 남지 않은 초안을 한 번에 검토 요청합니다. 검토자의 받은 일에 올라가고,
             회수하기 전에는 내용을 고칠 수 없습니다. 필수 섹션이 빈 문서는 제외되고 사유가
             표시됩니다.
+          </>
+        }
+      />
+
+      <BatchReviewDialog
+        tenant={tenant}
+        action="approve_draft"
+        revisionIds={drafts.ready}
+        open={fastApproving}
+        onOpenChange={setFastApproving}
+        description={
+          <>
+            정할 항목이 남지 않은 초안을 검토 요청 단계 없이 바로 승인합니다. 승인하면 조직의 기준이
+            되고, 문서마다 승인자로 기록되며 감사 기록에 &lsquo;검토 생략&rsquo;으로 남습니다. 작성자는
+            자기 문서를 승인할 수 없고(설정에서 끌 수 있습니다), 상위 문서가 승인되지 않은 문서와
+            필수 섹션이 빈 문서는 제외되고 사유가 표시됩니다.
           </>
         }
       />

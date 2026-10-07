@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.sources import _run_out
 from app.db import CommitRoute, get_db
 from app.deps import TenantContext, current_user, tenant_context
 from app.domain import revisions as rev
@@ -15,6 +16,7 @@ from app.schemas import (
     BatchItemResult,
     BatchReviewIn,
     BatchReviewOut,
+    DecisionAiOut,
     DecisionFillIn,
     DecisionFillOut,
     DecisionGroup,
@@ -390,25 +392,31 @@ def review_batch(
         for i in ids
         if i not in found
     ]
-    permission = "doc.submit" if payload.action == "submit" else "doc.review"
+    permissions = {
+        "submit": ("doc.submit",),
+        "approve": ("doc.review",),
+        # 검토 요청을 건너뛰려면 요청과 승인을 모두 할 수 있어야 한다.
+        "approve_draft": ("doc.submit", "doc.review"),
+    }[payload.action]
     # 상위 문서부터 처리한다. 상위가 승인돼야 하위를 승인할 수 있다.
     for revision, doc in sorted(rows, key=lambda row: (row[1].code.count("-"), row[1].code)):
         ref = DocumentRef(id=doc.id, code=doc.code, title=doc.title, doc_type=doc.doc_type)
         error = ""
-        if not ctx.can(permission, doc.system_id):
+        if not all(ctx.can(p, doc.system_id) for p in permissions):
             error = "이 문서를 처리할 권한이 없습니다."
         else:
             try:
                 with db.begin_nested():
-                    if payload.action == "submit":
+                    if payload.action in ("submit", "approve_draft"):
                         svc.submit(db, revision=revision, actor_id=ctx.user.id)
-                    else:
+                    if payload.action in ("approve", "approve_draft"):
                         svc.approve(
                             db,
                             revision=revision,
                             actor_id=ctx.user.id,
                             comment=payload.comment,
                             tenant=ctx.tenant,
+                            skipped_review=payload.action == "approve_draft",
                         )
             except HTTPException as exc:
                 detail = exc.detail
@@ -454,6 +462,32 @@ def fill_decision(
         actor_id=ctx.user.id,
     )
     return DecisionFillOut(places=places, documents=documents)
+
+
+@router.get("/t/{tenant_slug}/systems/{system_slug}/decisions/ai", response_model=DecisionAiOut)
+def get_ai_decisions(
+    system_slug: str, ctx: TenantContext = Depends(tenant_context)
+) -> DecisionAiOut:
+    """'AI 로 채우기' 작업의 진행 상황과, 초안에 모델이 채운 값."""
+    system = ctx.system_by_slug(system_slug)
+    ctx.require("doc.read", system.id)
+    return DecisionAiOut(
+        run=_run_out(ctx.db, decision_svc.latest_ai_run(ctx.db, system.id)),
+        filled=decision_svc.ai_filled(ctx.db, system.id),
+    )
+
+
+@router.post("/t/{tenant_slug}/systems/{system_slug}/decisions/ai", response_model=DecisionAiOut)
+def start_ai_decisions(
+    system_slug: str, ctx: TenantContext = Depends(tenant_context)
+) -> DecisionAiOut:
+    """남은 항목을 모델이 모두 채운다. 작업은 대기열에 들어간다."""
+    system = ctx.system_by_slug(system_slug)
+    ctx.require("doc.edit", system.id)
+    run = decision_svc.start_ai_fill(ctx.db, system=system, actor_id=ctx.user.id)
+    return DecisionAiOut(
+        run=_run_out(ctx.db, run), filled=decision_svc.ai_filled(ctx.db, system.id)
+    )
 
 
 # ── 받은 일 ──────────────────────────────────────────────────────────────────

@@ -572,6 +572,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/t/{tenant_slug}/systems/{system_slug}/decisions/ai": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ai Decisions
+         * @description 'AI 로 채우기' 작업의 진행 상황과, 초안에 모델이 채운 값.
+         */
+        get: operations["get_ai_decisions_api_t__tenant_slug__systems__system_slug__decisions_ai_get"];
+        put?: never;
+        /**
+         * Start Ai Decisions
+         * @description 남은 항목을 모델이 모두 채운다. 작업은 대기열에 들어간다.
+         */
+        post: operations["start_ai_decisions_api_t__tenant_slug__systems__system_slug__decisions_ai_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/t/{tenant_slug}/inbox": {
         parameters: {
             query?: never;
@@ -1141,6 +1165,31 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AiDecision
+         * @description 모델이 채운 값 하나. 사람이 검토할 수 있게 근거와 함께 보여준다.
+         */
+        AiDecision: {
+            /**
+             * Revision Id
+             * Format: uuid
+             */
+            revision_id: string;
+            document: components["schemas"]["DocumentRef"];
+            /** Section Title */
+            section_title: string;
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+            /** Rationale */
+            rationale: string;
+            /**
+             * Decided At
+             * Format: date-time
+             */
+            decided_at: string;
+        };
         /** ArtifactDetail */
         ArtifactDetail: {
             /**
@@ -1353,7 +1402,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "submit" | "approve";
+            action: "submit" | "approve" | "approve_draft";
             /** Revision Ids */
             revision_ids: string[];
             /**
@@ -1565,6 +1614,12 @@ export interface components {
             chapters: components["schemas"]["CoverageChapter"][];
             /** Requirements */
             requirements: components["schemas"]["CoverageRequirement"][];
+        };
+        /** DecisionAiOut */
+        DecisionAiOut: {
+            run: components["schemas"]["RunOut"] | null;
+            /** Filled */
+            filled: components["schemas"]["AiDecision"][];
         };
         /** DecisionFillIn */
         DecisionFillIn: {
@@ -4171,6 +4226,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DecisionFillOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ai_decisions_api_t__tenant_slug__systems__system_slug__decisions_ai_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionAiOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_ai_decisions_api_t__tenant_slug__systems__system_slug__decisions_ai_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionAiOut"];
                 };
             };
             /** @description Validation Error */

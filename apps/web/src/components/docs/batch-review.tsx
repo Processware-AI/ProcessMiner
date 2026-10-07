@@ -35,7 +35,7 @@ export function BatchReviewDialog({
   onDone,
 }: {
   tenant: string;
-  action: "submit" | "approve";
+  action: "submit" | "approve" | "approve_draft";
   revisionIds: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +47,7 @@ export function BatchReviewDialog({
   const [result, setResult] = useState<BatchReview | null>(null);
   const count = Math.min(revisionIds.length, BATCH_LIMIT);
   const verb = action === "submit" ? "검토 요청" : "승인";
+  const approving = action !== "submit";
 
   const run = useMutation({
     mutationFn: () =>
@@ -84,11 +85,12 @@ export function BatchReviewDialog({
           <div className="grid min-w-0 gap-4">
             <DialogHeader>
               <DialogTitle>
+                {action === "approve_draft" && "검토 없이 "}
                 {count}건 {verb}
               </DialogTitle>
               <DialogDescription>{description}</DialogDescription>
             </DialogHeader>
-            {action === "approve" && (
+            {approving && (
               <Textarea
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
