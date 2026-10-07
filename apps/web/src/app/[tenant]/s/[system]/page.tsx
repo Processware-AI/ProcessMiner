@@ -26,6 +26,7 @@ import {
   TypeBadge,
 } from "@/components/bits";
 import { BatchReviewDialog } from "@/components/docs/batch-review";
+import { ExamplesPanel } from "@/components/docs/examples-panel";
 import { NewDocumentDialog, type NewDocumentParent } from "@/components/docs/new-document-dialog";
 import { TAILORING_LABEL, TAILORING_STYLE } from "@/components/docs/tailoring-panel";
 import { Button } from "@/components/ui/button";
@@ -215,6 +216,8 @@ export default function LibraryPage() {
           {documents.data && `${rows.length}건${filtering ? ` / 전체 ${all.length}건` : ""}`}
         </span>
       </div>
+
+      <ExamplesPanel tenant={tenant} system={system} canCreate={canCreate} />
 
       {parentSystem && documents.data && (
         <p className="rounded-xl border border-violet-500/25 bg-violet-500/6 px-4 py-2.5 text-sm text-pretty">

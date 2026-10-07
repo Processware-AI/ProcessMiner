@@ -103,6 +103,10 @@ test("하위 체계에서 문서를 재정의·제외하고, 기준선 개정을
   await expect(page.getByRole("textbox", { name: "업무 목적", exact: true })).toHaveValue("기준선 내용");
   await fillSection(page, "업무 목적", "개발본부는 병합 요청으로 개정한다.");
   await expect(page.getByText("저장됨")).toBeVisible();
+  // 오른쪽의 상위 문서 목록으로 위로 이동할 수 있다.
+  const rail = page.getByRole("complementary");
+  await expect(rail.getByRole("link", { name: /문서 관리 절차/ })).toBeVisible();
+  await expect(rail.getByRole("link", { name: /품질 방침/ })).toBeVisible();
   await page.screenshot(shot("01-override"));
   const overrideUrl = page.url();
 

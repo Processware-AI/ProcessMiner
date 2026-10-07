@@ -615,6 +615,80 @@ def test_a_new_standard_is_added_to_existing_documents(consultant, fake_pdf, mon
     assert refused.json()["detail"]["code"] == "no_documents"
 
 
+def test_examples_are_written_for_each_form(consultant, fake_pdf, monkeypatch):  # noqa: F811
+    from app.pipelines.examples import ExampleOutput
+
+    tenant = new_tenant(consultant)
+    source_id, system = _approved_basis(consultant, tenant, monkeypatch)
+    _fake_generation(monkeypatch, _structure())
+    plan_id = consultant.post(
+        f"{system}/plans", json={"source_ids": [source_id], "scope_code": "QMS"}
+    ).json()["id"]
+    worker.process_next_run()
+    consultant.post(f"{system}/plans/{plan_id}/write", json={})
+    worker.process_next_run()
+    documents = {d["code"]: d for d in consultant.get(f"{system}/documents").json()}
+    form = documents["TMP-QMS-01-01-01-01"]
+    revision = consultant.get(f"/api/t/{tenant}/revisions/{form['open_revision_id']}").json()
+    table = "| 항목 | 내용 |\n|---|---|\n| 작성자 |  |\n| 승인 |  |"
+    sections = [
+        {**s, "body_md": table if s["key"] == "fields" else s["body_md"]}
+        for s in revision["sections"]
+    ]
+    consultant.patch(f"/api/t/{tenant}/revisions/{revision['id']}", json={"sections": sections})
+
+    state = consultant.get(f"{system}/examples").json()
+    assert [m["code"] for m in state["missing"]] == ["TMP-QMS-01-01-01-01"] and state["run"] is None
+    viewer = add_member(consultant, tenant, "구성원", [])
+    assert viewer.post(f"{system}/examples").status_code == 403
+
+    prompts: list[str] = []
+    SAMPLE = "| 항목 | 예시값 | 작성 요령 |\n|---|---|---|\n| 작성자 | 개발자 A | 이름 |"
+
+    def structured(*, system, user, schema, **_):
+        prompts.append(user)
+        assert schema is ExampleOutput
+        return llm.LLMResult(
+            ExampleOutput.model_validate(
+                {
+                    "sections": [
+                        {"key": "sample", "body_md": SAMPLE},
+                        {"key": "cautions", "body_md": "- 날짜를 확인한다"},
+                        {"key": "bad_examples", "body_md": "- **잘못된 예**: 빈칸"},
+                    ]
+                }
+            ),
+            "fake-model",
+            30,
+            20,
+        )
+
+    monkeypatch.setattr(llm, "structured", structured)
+    assert consultant.post(f"{system}/examples").json()["run"]["status"] == "queued"
+    assert consultant.post(f"{system}/examples").json()["detail"]["code"] == "run_in_progress"
+    worker.process_next_run()
+
+    # 양식 항목, 지침 본문, 지침이 이행하는 요건이 함께 주어진다.
+    assert "- 작성자\n- 승인" in prompts[0] and "IEC99999 2.1.1-01" in prompts[0]
+    state = consultant.get(f"{system}/examples").json()
+    assert state["missing"] == [] and state["run"]["progress"]["done"] == 1
+    documents = {d["code"]: d for d in consultant.get(f"{system}/documents").json()}
+    example = documents["EX-QMS-01-01-01-01"]
+    assert example["title"] == "개발 계획서 작성예시" and example["parent_id"] == form["parent_id"]
+    detail = consultant.get(f"/api/t/{tenant}/documents/{example['id']}").json()
+    assert detail["open"]["generated_by"] == "fake-model"
+    assert detail["open"]["sections"][0]["body_md"].startswith("| 항목 | 예시값")
+    # 예시와 양식은 서로를 가리킨다.
+    assert detail["example_of"]["code"] == "TMP-QMS-01-01-01-01"
+    form_detail = consultant.get(f"/api/t/{tenant}/documents/{form['id']}").json()
+    assert form_detail["example"]["code"] == "EX-QMS-01-01-01-01"
+    # 작성예시는 기록 양식으로 고를 수 없다.
+    templates = consultant.get(f"{system}/record-templates").json()
+    assert [t["document"]["code"] for t in templates] == ["TMP-QMS-01-01-01-01"]
+    again = consultant.post(f"{system}/examples")
+    assert again.json()["detail"]["code"] == "nothing_to_write"
+
+
 def test_ungrounded_documents_are_not_saved_and_can_be_retried(consultant, fake_pdf, monkeypatch):  # noqa: F811
     tenant = new_tenant(consultant)
     source_id, system = _approved_basis(consultant, tenant, monkeypatch)

@@ -329,8 +329,16 @@ class TailoringIn(BaseModel):
     reason: str = Field(default="", max_length=2000)
 
 
+class ExamplesOut(BaseModel):
+    run: "RunOut | None"  # 가장 최근의 작성예시 만들기 작업
+    missing: list[DocumentRef]  # 작성예시가 없는 양식
+
+
 class DocumentDetail(BaseModel):
     document: DocumentSummary
+    # 작성예시와 양식은 서로를 가리킨다: 예시면 그 양식, 양식이면 그 예시
+    example_of: "DocumentRef | None" = None
+    example: "DocumentRef | None" = None
     tailoring: TailoringInfo
     system: SystemOut
     ancestors: list[DocumentRef]  # 최상위부터 바로 위 문서까지

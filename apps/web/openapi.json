@@ -1257,6 +1257,108 @@
         }
       }
     },
+    "/api/t/{tenant_slug}/systems/{system_slug}/examples": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Get Examples",
+        "description": "작성예시가 없는 양식과, 작성예시 만들기 작업의 진행 상황.",
+        "operationId": "get_examples_api_t__tenant_slug__systems__system_slug__examples_get",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExamplesOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Start Examples",
+        "description": "작성예시가 없는 양식마다 AI 가 작성예시를 쓴다. 작업은 대기열에 들어간다.",
+        "operationId": "start_examples_api_t__tenant_slug__systems__system_slug__examples_post",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExamplesOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/t/{tenant_slug}/systems/{system_slug}/tailoring/{document_id}/override": {
       "post": {
         "tags": [
@@ -5891,6 +5993,26 @@
           "document": {
             "$ref": "#/components/schemas/DocumentSummary"
           },
+          "example_of": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "example": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "tailoring": {
             "$ref": "#/components/schemas/TailoringInfo"
           },
@@ -6205,6 +6327,33 @@
           "updated_at"
         ],
         "title": "DocumentSummary"
+      },
+      "ExamplesOut": {
+        "properties": {
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "missing": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentRef"
+            },
+            "type": "array",
+            "title": "Missing"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run",
+          "missing"
+        ],
+        "title": "ExamplesOut"
       },
       "ExclusionIn": {
         "properties": {
