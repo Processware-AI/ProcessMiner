@@ -1,20 +1,27 @@
 "use client";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  ArchiveRestoreIcon,
   CheckCheckIcon,
   ChevronRightIcon,
   ClipboardCheckIcon,
+  CopyIcon,
   FileTextIcon,
+  FolderInputIcon,
   ListChecksIcon,
   PencilLineIcon,
   PlusIcon,
   SearchIcon,
   SendIcon,
   SparklesIcon,
+  Trash2Icon,
+  XIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import {
   DocCode,
@@ -27,15 +34,23 @@ import {
 } from "@/components/bits";
 import { BatchReviewDialog } from "@/components/docs/batch-review";
 import { ExamplesPanel } from "@/components/docs/examples-panel";
+import { RelocateDocumentsDialog, RemoveDocumentsDialog } from "@/components/docs/organize-dialog";
 import { NewDocumentDialog, type NewDocumentParent } from "@/components/docs/new-document-dialog";
 import { TAILORING_LABEL, TAILORING_STYLE } from "@/components/docs/tailoring-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { DocumentSummary } from "@/lib/api";
-import { formatRelative } from "@/lib/labels";
-import { useDocTypes, useDocuments, useSystem, useSystems } from "@/lib/queries";
+import { api, type DocumentSummary, unwrap } from "@/lib/api";
+import { formatDate, formatRelative } from "@/lib/labels";
+import {
+  keys,
+  useDocTypes,
+  useDocuments,
+  useRetiredDocuments,
+  useSystem,
+  useSystems,
+} from "@/lib/queries";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
@@ -66,7 +81,12 @@ const FILTERS = [
   { value: "approved", label: "승인됨" },
   // 하위 체계에서만: 상위 체계와 다르게 한 문서(재정의·제외·추가)
   { value: "tailored", label: "바꾼 문서" },
+  // 폐지한 문서는 목록에 나오지 않는다. 여기서 보고 되살린다.
+  { value: "retired", label: "폐지됨" },
 ] as const;
+
+// 이 체계의 문서(물려받은 문서가 아닌 것)만 정리할 수 있다.
+const OWN_STATES = new Set(["own", "added", "override"]);
 
 /** 자산 라이브러리: 한 체계의 문서를 계층으로 본다. */
 export default function LibraryPage() {
@@ -81,9 +101,23 @@ export default function LibraryPage() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [dialog, setDialog] = useState<{ parent?: NewDocumentParent } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // 고른 문서. 다른 체계로 이동하면 선택은 의미가 없으므로 체계와 함께 둔다.
+  const [selection, setSelection] = useState<{ system: string; ids: Set<string> }>({
+    system,
+    ids: new Set(),
+  });
+  const selected = selection.system === system ? selection.ids : new Set<string>();
+  const [organize, setOrganize] = useState<{
+    kind: "move" | "copy" | "remove";
+    documents: DocumentSummary[];
+  } | null>(null);
+  const queryClient = useQueryClient();
+  const retired = useRetiredDocuments(tenant, system, filter === "retired");
 
   const canCreate = systemQuery.data?.actions.includes("doc.create") ?? false;
   const canSubmit = systemQuery.data?.actions.includes("doc.submit") ?? false;
+  const canManage = systemQuery.data?.actions.includes("doc.manage") ?? false;
+  const canSelect = canManage || canCreate;
   // 검토 요청을 건너뛰고 바로 승인하려면 요청과 검토를 모두 할 수 있어야 한다.
   const canFastApprove = canSubmit && (systemQuery.data?.actions.includes("doc.review") ?? false);
   const [fastApproving, setFastApproving] = useState(false);
@@ -108,6 +142,16 @@ export default function LibraryPage() {
   const needle = query.trim().toLowerCase();
   const filtering = needle !== "" || filter !== "all";
   const rows = useMemo<Row[]>(() => {
+    if (filter === "retired") {
+      return (retired.data ?? [])
+        .filter(
+          (doc) =>
+            !needle ||
+            doc.code.toLowerCase().includes(needle) ||
+            doc.title.toLowerCase().includes(needle),
+        )
+        .map((doc) => ({ doc, depth: 0, hasChildren: false }));
+    }
     if (!filtering) return toRows(all, collapsed);
     // 걸러 볼 때는 계층 없이 일치하는 문서만 나열한다.
     return all
@@ -126,7 +170,7 @@ export default function LibraryPage() {
         return matchesText && matchesFilter;
       })
       .map((doc) => ({ doc, depth: 0, hasChildren: false }));
-  }, [all, collapsed, filtering, needle, filter]);
+  }, [all, collapsed, filtering, needle, filter, retired.data]);
   const tailoring = useMemo(() => {
     const count = (state: string) => all.filter((doc) => doc.tailoring === state).length;
     return {
@@ -137,6 +181,32 @@ export default function LibraryPage() {
       changed: all.filter((doc) => doc.base_changed).length,
     };
   }, [all]);
+
+  function toggleSelected(id: string) {
+    setSelection(() => {
+      const ids = new Set(selected);
+      if (!ids.delete(id)) ids.add(id);
+      return { system, ids };
+    });
+  }
+  const clearSelection = () => setSelection({ system, ids: new Set() });
+  const selectedDocuments = all.filter((doc) => selected.has(doc.id));
+
+  const restore = useMutation({
+    mutationFn: (documentId: string) =>
+      unwrap(
+        api.POST("/api/t/{tenant_slug}/documents/{document_id}/restore", {
+          params: { path: { tenant_slug: tenant, document_id: documentId } },
+        }),
+      ),
+    onSuccess: async (result) => {
+      toast.success(`문서 ${result.restored.length}건을 되살렸습니다.`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: keys.docsAll(tenant) }),
+        queryClient.invalidateQueries({ queryKey: keys.systems(tenant) }),
+      ]);
+    },
+  });
 
   function toggle(id: string) {
     setCollapsed((previous) => {
@@ -213,7 +283,9 @@ export default function LibraryPage() {
           ))}
         </div>
         <span className="ml-auto text-sm text-muted-foreground">
-          {documents.data && `${rows.length}건${filtering ? ` / 전체 ${all.length}건` : ""}`}
+          {filter === "retired"
+            ? retired.data && `폐지 ${rows.length}건`
+            : documents.data && `${rows.length}건${filtering ? ` / 전체 ${all.length}건` : ""}`}
         </span>
       </div>
 
@@ -275,7 +347,11 @@ export default function LibraryPage() {
       )}
       {documents.error && <ErrorState error={documents.error} />}
 
-      {documents.data && all.length === 0 && (
+      {filter === "retired" && retired.data && rows.length === 0 && (
+        <p className="py-8 text-center text-sm text-muted-foreground">폐지한 문서가 없습니다.</p>
+      )}
+
+      {documents.data && all.length === 0 && filter !== "retired" && (
         <EmptyState
           icon={<FileTextIcon />}
           title="아직 문서가 없습니다"
@@ -289,7 +365,7 @@ export default function LibraryPage() {
           }
         />
       )}
-      {documents.data && all.length > 0 && rows.length === 0 && (
+      {documents.data && all.length > 0 && rows.length === 0 && filter !== "retired" && (
         <p className="py-8 text-center text-sm text-muted-foreground">조건에 맞는 문서가 없습니다.</p>
       )}
 
@@ -304,9 +380,22 @@ export default function LibraryPage() {
               )}
               title={doc.tailoring === "excluded" ? `제외 사유: ${doc.tailoring_reason || "상위 문서 제외"}` : undefined}
             >
+              {canSelect && filter !== "retired" && (
+                <span className="flex w-8 shrink-0 justify-center">
+                  {OWN_STATES.has(doc.tailoring) && (
+                    <input
+                      type="checkbox"
+                      checked={selected.has(doc.id)}
+                      onChange={() => toggleSelected(doc.id)}
+                      aria-label={`${doc.title} 선택`}
+                      className="size-4 accent-primary"
+                    />
+                  )}
+                </span>
+              )}
               <div
                 className="flex shrink-0 items-center"
-                style={{ paddingLeft: `${0.375 + depth * 1.125}rem` }}
+                style={{ paddingLeft: `${(canSelect ? 0 : 0.375) + depth * 1.125}rem` }}
               >
                 {hasChildren ? (
                   <button
@@ -364,13 +453,33 @@ export default function LibraryPage() {
                   {doc.open_status && (
                     <StatusBadge status={doc.open_status} version={doc.open_version} />
                   )}
+                  {doc.retired_at && (
+                    <span
+                      className="inline-flex h-5 items-center rounded-md bg-muted px-1.5 text-xs whitespace-nowrap text-muted-foreground"
+                      title={doc.retire_reason ? `폐지 사유: ${doc.retire_reason}` : undefined}
+                    >
+                      {formatDate(doc.retired_at)} 폐지
+                    </span>
+                  )}
                 </span>
                 <span className="hidden w-20 shrink-0 text-right text-xs text-muted-foreground md:block">
                   {formatRelative(doc.updated_at)}
                 </span>
               </Link>
 
-              {canCreate && parentTypes.has(doc.doc_type) && doc.tailoring !== "excluded" && (
+              {doc.retired_at && canManage && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mr-2"
+                  onClick={() => restore.mutate(doc.id)}
+                  disabled={restore.isPending}
+                >
+                  <ArchiveRestoreIcon />
+                  되살리기
+                </Button>
+              )}
+              {!doc.retired_at && canCreate && parentTypes.has(doc.doc_type) && doc.tailoring !== "excluded" && (
                 <Tooltip>
                   <TooltipTrigger
                     render={
@@ -391,6 +500,69 @@ export default function LibraryPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {selectedDocuments.length > 0 && (
+        <div
+          role="toolbar"
+          aria-label="고른 문서 정리"
+          className="sticky bottom-20 z-20 mx-auto flex w-fit max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-border bg-background/95 p-1.5 pl-3 shadow-lg backdrop-blur md:bottom-4"
+        >
+          <span className="mr-1 text-sm font-medium">{selectedDocuments.length}건 선택</span>
+          {canManage && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setOrganize({ kind: "move", documents: selectedDocuments })}
+            >
+              <FolderInputIcon />
+              옮기기
+            </Button>
+          )}
+          {canCreate && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setOrganize({ kind: "copy", documents: selectedDocuments })}
+            >
+              <CopyIcon />
+              복사
+            </Button>
+          )}
+          {canManage && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive"
+              onClick={() => setOrganize({ kind: "remove", documents: selectedDocuments })}
+            >
+              <Trash2Icon />
+              삭제
+            </Button>
+          )}
+          <Button size="icon-sm" variant="ghost" aria-label="선택 해제" onClick={clearSelection}>
+            <XIcon />
+          </Button>
+        </div>
+      )}
+
+      <RemoveDocumentsDialog
+        tenant={tenant}
+        documents={organize?.kind === "remove" ? organize.documents : []}
+        open={organize?.kind === "remove"}
+        onOpenChange={(isOpen) => !isOpen && setOrganize(null)}
+        onDone={clearSelection}
+      />
+      {organize && organize.kind !== "remove" && (
+        <RelocateDocumentsDialog
+          tenant={tenant}
+          system={system}
+          mode={organize.kind}
+          documents={organize.documents}
+          open
+          onOpenChange={(isOpen) => !isOpen && setOrganize(null)}
+          onDone={clearSelection}
+        />
       )}
 
       <BatchReviewDialog

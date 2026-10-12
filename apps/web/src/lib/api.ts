@@ -48,6 +48,7 @@ export type BasisRequirement = Schemas["BasisRequirementOut"];
 export type Plan = Schemas["PlanOut"];
 export type PlanNode = Schemas["PlanNodeOut"];
 export type RevisionRequirement = Schemas["RevisionRequirementOut"];
+export type OrganizeResult = Schemas["OrganizeOut"];
 
 export class ApiError extends Error {
   constructor(

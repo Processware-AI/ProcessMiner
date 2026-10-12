@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app import worker
-from app.api import auth, build, documents, records, sources, tenants
+from app.api import auth, build, documents, organize, records, sources, tenants
 from app.config import get_settings
 
 
@@ -21,6 +21,7 @@ app = FastAPI(title="ProcessMiner API", version="0.1.0", lifespan=lifespan)
 app.include_router(auth.router)
 app.include_router(tenants.router)
 app.include_router(documents.router)
+app.include_router(organize.router)
 app.include_router(sources.router)
 app.include_router(build.router)
 app.include_router(records.router)

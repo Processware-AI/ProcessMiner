@@ -739,6 +739,109 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "tenants"
+        ],
+        "summary": "Update System",
+        "description": "체계의 이름과 설명을 바꾼다. 주소(slug)는 바꾸지 않는다(링크와 문서 화면 주소가 깨진다).",
+        "operationId": "update_system_api_t__tenant_slug__systems__system_slug__patch",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tenants"
+        ],
+        "summary": "Delete System",
+        "description": "빈 체계를 삭제한다. 하위 체계·문서·기록이 남아 있으면 삭제할 수 없다.",
+        "operationId": "delete_system_api_t__tenant_slug__systems__system_slug__delete",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/t/{tenant_slug}/members": {
@@ -2411,6 +2514,220 @@
                     "$ref": "#/components/schemas/InboxItem"
                   },
                   "title": "Response Inbox Api T  Tenant Slug  Inbox Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/systems/{system_slug}/documents/retired": {
+      "get": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "List Retired",
+        "description": "이 체계에서 폐지한 문서.",
+        "operationId": "list_retired_api_t__tenant_slug__systems__system_slug__documents_retired_get",
+        "parameters": [
+          {
+            "name": "system_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "System Slug"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentSummary"
+                  },
+                  "title": "Response List Retired Api T  Tenant Slug  Systems  System Slug  Documents Retired Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/documents/remove": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Remove Documents",
+        "description": "승인된 적 없는 문서는 지우고, 나머지는 폐지한다. 하위 문서도 함께.",
+        "operationId": "remove_documents_api_t__tenant_slug__documents_remove_post",
+        "parameters": [
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizeOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/documents/{document_id}/restore": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Restore Document",
+        "operationId": "restore_document_api_t__tenant_slug__documents__document_id__restore_post",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizeOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/t/{tenant_slug}/documents/relocate": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Relocate Documents",
+        "description": "문서를 옮기거나 복사한다.\n\n같은 체계로 옮기면 위치(상위 문서)만 바꾸고 번호를 다시 받는다. 다른 체계로 옮기면 그 체계에\n새 번호로 복사한 뒤 원본을 지우거나 폐지한다. 복사는 원본을 그대로 둔다.",
+        "operationId": "relocate_documents_api_t__tenant_slug__documents_relocate_post",
+        "parameters": [
+          {
+            "name": "tenant_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Slug"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RelocateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizeOut"
                 }
               }
             }
@@ -5480,6 +5797,22 @@
         ],
         "title": "ClauseSummary"
       },
+      "CopiedRef": {
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/DocumentRef"
+          },
+          "document": {
+            "$ref": "#/components/schemas/DocumentRef"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "document"
+        ],
+        "title": "CopiedRef"
+      },
       "CoverageChapter": {
         "properties": {
           "key": {
@@ -6307,6 +6640,23 @@
             "type": "boolean",
             "title": "Base Changed",
             "default": false
+          },
+          "retired_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired At"
+          },
+          "retire_reason": {
+            "type": "string",
+            "title": "Retire Reason",
+            "default": ""
           }
         },
         "type": "object",
@@ -6604,6 +6954,23 @@
         "type": "object",
         "title": "MemberPatch"
       },
+      "MovedRef": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/DocumentRef"
+          },
+          "old_code": {
+            "type": "string",
+            "title": "Old Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document",
+          "old_code"
+        ],
+        "title": "MovedRef"
+      },
       "OrgUnitIn": {
         "properties": {
           "name": {
@@ -6719,6 +7086,70 @@
         },
         "type": "object",
         "title": "OrgUnitPatch"
+      },
+      "OrganizeOut": {
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run"
+          },
+          "deleted": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentRef"
+            },
+            "type": "array",
+            "title": "Deleted",
+            "default": []
+          },
+          "retired": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentRef"
+            },
+            "type": "array",
+            "title": "Retired",
+            "default": []
+          },
+          "restored": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentRef"
+            },
+            "type": "array",
+            "title": "Restored",
+            "default": []
+          },
+          "created": {
+            "items": {
+              "$ref": "#/components/schemas/CopiedRef"
+            },
+            "type": "array",
+            "title": "Created",
+            "default": []
+          },
+          "moved": {
+            "items": {
+              "$ref": "#/components/schemas/MovedRef"
+            },
+            "type": "array",
+            "title": "Moved",
+            "default": []
+          },
+          "target_system": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SystemRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "dry_run"
+        ],
+        "title": "OrganizeOut",
+        "description": "정리 결과(또는 dry_run 이면 미리 본 결과)."
       },
       "PlanEditIn": {
         "properties": {
@@ -7565,6 +7996,99 @@
         ],
         "title": "RecordTemplateOut",
         "description": "기록을 만들 수 있는 양식."
+      },
+      "RelocateIn": {
+        "properties": {
+          "document_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Document Ids"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "move",
+              "copy"
+            ],
+            "title": "Mode"
+          },
+          "target_system": {
+            "type": "string",
+            "title": "Target System"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "include_children": {
+            "type": "boolean",
+            "title": "Include Children",
+            "default": true
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Reason",
+            "default": ""
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_ids",
+          "mode",
+          "target_system"
+        ],
+        "title": "RelocateIn",
+        "description": "문서를 옮기거나 복사한다. 하위 문서도 함께 간다."
+      },
+      "RemoveIn": {
+        "properties": {
+          "document_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Document Ids"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Reason",
+            "default": ""
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_ids"
+        ],
+        "title": "RemoveIn",
+        "description": "문서를 지우거나 폐지한다. 하위 문서도 함께 정리한다."
       },
       "RequirementCounts": {
         "properties": {
@@ -8643,6 +9167,14 @@
             },
             "type": "array",
             "title": "Actions"
+          },
+          "delete_blockers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Delete Blockers",
+            "default": []
           }
         },
         "type": "object",
@@ -8762,6 +9294,36 @@
           "created_at"
         ],
         "title": "SystemOut"
+      },
+      "SystemPatch": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "title": "SystemPatch"
       },
       "SystemRef": {
         "properties": {

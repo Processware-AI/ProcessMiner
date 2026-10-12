@@ -38,6 +38,7 @@ from app.schemas import (
     SystemDetail,
     SystemIn,
     SystemOut,
+    SystemPatch,
     TenantIn,
     TenantOut,
     TenantPurgeIn,
@@ -47,6 +48,7 @@ from app.schemas import (
     UserRef,
 )
 from app.services import audit
+from app.services import systems as system_service
 from app.services.auth import normalize_email
 from app.services.documents import four_eyes_enabled
 
@@ -317,13 +319,51 @@ def create_system(payload: SystemIn, ctx: TenantContext = Depends(tenant_context
 def get_system(system_slug: str, ctx: TenantContext = Depends(tenant_context)) -> SystemDetail:
     system = ctx.system_by_slug(system_slug)
     count = ctx.db.scalar(
-        select(func.count()).select_from(Document).where(Document.system_id == system.id)
+        select(func.count())
+        .select_from(Document)
+        .where(Document.system_id == system.id, Document.retired_at.is_(None))
     )
     return SystemDetail(
         **SystemOut.model_validate(system).model_dump(),
         document_count=count or 0,
         actions=ctx.allowed_actions(system.id),
+        delete_blockers=system_service.delete_blockers(ctx.db, system),
     )
+
+
+@router.patch("/t/{tenant_slug}/systems/{system_slug}", response_model=SystemOut)
+def update_system(
+    system_slug: str, payload: SystemPatch, ctx: TenantContext = Depends(tenant_context)
+) -> ProcessSystem:
+    """체계의 이름과 설명을 바꾼다. 주소(slug)는 바꾸지 않는다(링크와 문서 화면 주소가 깨진다)."""
+    system = ctx.system_by_slug(system_slug)
+    ctx.require("system.manage", system.id)
+    before = {"name": system.name, "description": system.description}
+    if payload.name is not None:
+        system.name = payload.name.strip()
+    if payload.description is not None:
+        system.description = payload.description.strip()
+    after = {"name": system.name, "description": system.description}
+    if after != before:
+        ctx.db.flush()
+        audit.record(
+            ctx.db,
+            tenant_id=ctx.tenant.id,
+            actor_id=ctx.user.id,
+            action="system.update",
+            entity_type="system",
+            entity_id=system.id,
+            data={"slug": system.slug, "before": before, "after": after},
+        )
+    return system
+
+
+@router.delete("/t/{tenant_slug}/systems/{system_slug}", status_code=204)
+def delete_system(system_slug: str, ctx: TenantContext = Depends(tenant_context)) -> None:
+    """빈 체계를 삭제한다. 하위 체계·문서·기록이 남아 있으면 삭제할 수 없다."""
+    system = ctx.system_by_slug(system_slug)
+    ctx.require("system.manage", system.id)
+    system_service.delete(ctx.db, system=system, actor_id=ctx.user.id)
 
 
 # ── 구성원 ───────────────────────────────────────────────────────────────────

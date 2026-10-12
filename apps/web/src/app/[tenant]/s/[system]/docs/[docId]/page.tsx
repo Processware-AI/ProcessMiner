@@ -2,10 +2,14 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  ArchiveIcon,
+  ArchiveRestoreIcon,
   CheckIcon,
   ChevronRightIcon,
+  CopyIcon,
   EllipsisIcon,
   FilePenLineIcon,
+  FolderInputIcon,
   PlusIcon,
   SparklesIcon,
   Trash2Icon,
@@ -19,6 +23,7 @@ import { toast } from "sonner";
 
 import { DocCode, ErrorState, Field, StatusBadge, TypeBadge } from "@/components/bits";
 import { NewDocumentDialog } from "@/components/docs/new-document-dialog";
+import { RelocateDocumentsDialog, RemoveDocumentsDialog } from "@/components/docs/organize-dialog";
 import { RevisionEditor } from "@/components/docs/revision-editor";
 import { RevisionCompare, RevisionView } from "@/components/docs/revision-view";
 import { TAILORING_LABEL, TAILORING_STYLE, TailoringPanel } from "@/components/docs/tailoring-panel";
@@ -102,8 +107,10 @@ function DocumentScreen({
   if (view === "compare" && !(open && approved)) view = fallback;
 
   const [dialog, setDialog] = useState<
-    "start" | "approve" | "reject" | "discard" | "child" | null
+    "start" | "approve" | "reject" | "discard" | "child" | "move" | "copy" | "remove" | null
   >(null);
+  const organizeTarget = [doc];
+  const home = detail.system.slug;
 
   const historical = useRevision(tenant, typeof view === "object" ? view.revisionId : null);
   const schema = docTypes.data?.find((t) => t.code === doc.doc_type)?.sections ?? [];
@@ -116,6 +123,20 @@ function DocumentScreen({
       queryClient.invalidateQueries({ queryKey: keys.inbox(tenant) }),
     ]);
   }
+
+  const restore = useMutation({
+    mutationFn: () =>
+      unwrap(
+        api.POST("/api/t/{tenant_slug}/documents/{document_id}/restore", {
+          params: { path: { tenant_slug: tenant, document_id: doc.id } },
+        }),
+      ),
+    onSuccess: async (result) => {
+      toast.success(`문서 ${result.restored.length}건을 되살렸습니다.`);
+      await refresh();
+      await queryClient.invalidateQueries({ queryKey: keys.systems(tenant) });
+    },
+  });
 
   const withdraw = useMutation({
     mutationFn: () =>
@@ -219,7 +240,13 @@ function DocumentScreen({
               개정 시작
             </Button>
           )}
-          {(childTypes.length > 0 || can("discard")) && (
+          {can("restore") && (
+            <Button onClick={() => restore.mutate()} disabled={restore.isPending}>
+              <ArchiveRestoreIcon />
+              되살리기
+            </Button>
+          )}
+          {(childTypes.length > 0 || can("discard") || can("copy") || can("move")) && (
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={<Button variant="outline" size="icon" aria-label="더 보기" />}
@@ -233,7 +260,27 @@ function DocumentScreen({
                     하위 문서 추가
                   </DropdownMenuItem>
                 )}
-                {can("discard") && (
+                {can("move") && (
+                  <DropdownMenuItem onClick={() => setDialog("move")}>
+                    <FolderInputIcon />
+                    옮기기
+                  </DropdownMenuItem>
+                )}
+                {can("copy") && (
+                  <DropdownMenuItem onClick={() => setDialog("copy")}>
+                    <CopyIcon />
+                    복사
+                  </DropdownMenuItem>
+                )}
+                {can("remove") && (
+                  <DropdownMenuItem variant="destructive" onClick={() => setDialog("remove")}>
+                    <ArchiveIcon />
+                    {approved ? "폐지" : "삭제"}
+                    <span className="ml-auto text-xs text-muted-foreground">하위 포함</span>
+                  </DropdownMenuItem>
+                )}
+                {/* 승인판이 없는 문서의 삭제는 위 '삭제'(하위 문서 포함)가 맡는다. */}
+                {can("discard") && (approved || !can("remove")) && (
                   <DropdownMenuItem variant="destructive" onClick={() => setDialog("discard")}>
                     <Trash2Icon />
                     {approved ? "초안 폐기" : "문서 삭제"}
@@ -244,6 +291,17 @@ function DocumentScreen({
           )}
         </div>
       </header>
+
+      {doc.retired_at && (
+        <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/50 px-4 py-3 text-sm">
+          <ArchiveIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <p className="text-pretty">
+            {formatDate(doc.retired_at)}에 폐지한 문서입니다
+            {doc.retire_reason && <> (사유: {doc.retire_reason})</>}. 체계의 문서 목록과 커버리지에서
+            빠져 있고, 개정 이력은 그대로 남아 있습니다.
+          </p>
+        </div>
+      )}
 
       {open && approved && (
         <div className="flex w-fit rounded-lg bg-muted p-0.5" role="group" aria-label="볼 판 선택">
@@ -465,6 +523,35 @@ function DocumentScreen({
         open={dialog === "child"}
         onOpenChange={(isOpen) => !isOpen && setDialog(null)}
       />
+      <RemoveDocumentsDialog
+        tenant={tenant}
+        documents={organizeTarget}
+        open={dialog === "remove"}
+        onOpenChange={(isOpen) => !isOpen && setDialog(null)}
+        onDone={(result) => {
+          // 지웠으면 이 화면은 더 열 수 없다. 폐지했으면 폐지 안내와 함께 그대로 본다.
+          if (result.deleted.some((d) => d.id === doc.id)) {
+            router.replace(routes.library(tenant, system));
+          }
+        }}
+      />
+      {(dialog === "move" || dialog === "copy") && (
+        <RelocateDocumentsDialog
+          tenant={tenant}
+          system={home}
+          mode={dialog}
+          documents={organizeTarget}
+          open
+          onOpenChange={(isOpen) => !isOpen && setDialog(null)}
+          onDone={(result) => {
+            // 다른 체계로 갔으면 새 문서를 연다.
+            const copy = result.created.find((c) => c.source.id === doc.id);
+            if (copy && result.target_system) {
+              router.push(routes.document(tenant, result.target_system.slug, copy.document.id));
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

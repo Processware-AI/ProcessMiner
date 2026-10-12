@@ -81,6 +81,8 @@ def _summary(
             len(rev.open_decisions(opened.sections)) if opened and opened.status == rev.DRAFT else 0
         ),
         updated_at=latest,
+        retired_at=doc.retired_at,
+        retire_reason=doc.retire_reason,
     )
 
 
@@ -132,6 +134,11 @@ def effective_summaries(db: Session, entries: list[tailoring.Effective]) -> list
 def list_documents(db: Session, system: ProcessSystem) -> list[DocumentSummary]:
     """이 체계에서 쓰이는 문서: 자기 문서와, 상위 체계에서 물려받은 문서."""
     return effective_summaries(db, tailoring.effective_documents(db, system))
+
+
+def list_retired(db: Session, system: ProcessSystem) -> list[DocumentSummary]:
+    """이 체계에서 폐지한 문서."""
+    return _summaries(db, Document.system_id == system.id, Document.retired_at.is_not(None))
 
 
 def list_children(db: Session, document_id: uuid.UUID) -> list[DocumentSummary]:
@@ -290,7 +297,7 @@ def create_document(
             inherited = tailoring.find(db, system, parent.id)
             if inherited is None or inherited.state == "excluded":
                 parent = None
-        if parent is None:
+        if parent is None or parent.retired_at is not None:
             raise api_error(422, "parent_not_found", "상위 문서를 이 체계에서 찾을 수 없습니다.")
         if parent.doc_type != expected_parent:
             raise api_error(
@@ -367,6 +374,8 @@ def create_document(
 def start_revision(
     db: Session, *, doc: Document, change_kind: str, change_summary: str, actor_id: uuid.UUID
 ) -> DocumentRevision:
+    if doc.retired_at is not None:
+        raise api_error(409, "document_retired", "폐지한 문서입니다. 되살린 뒤에 개정하세요.")
     if open_revision(db, doc.id) is not None:
         raise api_error(409, "revision_in_progress", "이미 진행 중인 개정판이 있습니다.")
     current = approved_revision(db, doc.id)

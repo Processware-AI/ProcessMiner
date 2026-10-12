@@ -231,10 +231,18 @@ export interface paths {
         get: operations["get_system_api_t__tenant_slug__systems__system_slug__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete System
+         * @description 빈 체계를 삭제한다. 하위 체계·문서·기록이 남아 있으면 삭제할 수 없다.
+         */
+        delete: operations["delete_system_api_t__tenant_slug__systems__system_slug__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update System
+         * @description 체계의 이름과 설명을 바꾼다. 주소(slug)는 바꾸지 않는다(링크와 문서 화면 주소가 깨진다).
+         */
+        patch: operations["update_system_api_t__tenant_slug__systems__system_slug__patch"];
         trace?: never;
     };
     "/api/t/{tenant_slug}/members": {
@@ -634,6 +642,86 @@ export interface paths {
         get: operations["inbox_api_t__tenant_slug__inbox_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/systems/{system_slug}/documents/retired": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Retired
+         * @description 이 체계에서 폐지한 문서.
+         */
+        get: operations["list_retired_api_t__tenant_slug__systems__system_slug__documents_retired_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/documents/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Documents
+         * @description 승인된 적 없는 문서는 지우고, 나머지는 폐지한다. 하위 문서도 함께.
+         */
+        post: operations["remove_documents_api_t__tenant_slug__documents_remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/documents/{document_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Document */
+        post: operations["restore_document_api_t__tenant_slug__documents__document_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/t/{tenant_slug}/documents/relocate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Relocate Documents
+         * @description 문서를 옮기거나 복사한다.
+         *
+         *     같은 체계로 옮기면 위치(상위 문서)만 바꾸고 번호를 다시 받는다. 다른 체계로 옮기면 그 체계에
+         *     새 번호로 복사한 뒤 원본을 지우거나 폐지한다. 복사는 원본을 그대로 둔다.
+         */
+        post: operations["relocate_documents_api_t__tenant_slug__documents_relocate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1527,6 +1615,11 @@ export interface components {
             /** Unverified Count */
             unverified_count: number;
         };
+        /** CopiedRef */
+        CopiedRef: {
+            source: components["schemas"]["DocumentRef"];
+            document: components["schemas"]["DocumentRef"];
+        };
         /** CoverageChapter */
         CoverageChapter: {
             /** Key */
@@ -1824,6 +1917,13 @@ export interface components {
              * @default false
              */
             base_changed: boolean;
+            /** Retired At */
+            retired_at?: string | null;
+            /**
+             * Retire Reason
+             * @default
+             */
+            retire_reason: string;
         };
         /** ExamplesOut */
         ExamplesOut: {
@@ -1930,6 +2030,12 @@ export interface components {
             /** Roles */
             roles?: components["schemas"]["RoleGrantIO"][] | null;
         };
+        /** MovedRef */
+        MovedRef: {
+            document: components["schemas"]["DocumentRef"];
+            /** Old Code */
+            old_code: string;
+        };
         /** OrgUnitIn */
         OrgUnitIn: {
             /** Name */
@@ -1964,6 +2070,40 @@ export interface components {
             name?: string | null;
             /** Kind */
             kind?: ("company" | "division" | "team" | "project") | null;
+        };
+        /**
+         * OrganizeOut
+         * @description 정리 결과(또는 dry_run 이면 미리 본 결과).
+         */
+        OrganizeOut: {
+            /** Dry Run */
+            dry_run: boolean;
+            /**
+             * Deleted
+             * @default []
+             */
+            deleted: components["schemas"]["DocumentRef"][];
+            /**
+             * Retired
+             * @default []
+             */
+            retired: components["schemas"]["DocumentRef"][];
+            /**
+             * Restored
+             * @default []
+             */
+            restored: components["schemas"]["DocumentRef"][];
+            /**
+             * Created
+             * @default []
+             */
+            created: components["schemas"]["CopiedRef"][];
+            /**
+             * Moved
+             * @default []
+             */
+            moved: components["schemas"]["MovedRef"][];
+            target_system?: components["schemas"]["SystemRef"] | null;
         };
         /**
          * PlanEditIn
@@ -2260,6 +2400,56 @@ export interface components {
             approved: boolean;
             /** Fields */
             fields: string[];
+        };
+        /**
+         * RelocateIn
+         * @description 문서를 옮기거나 복사한다. 하위 문서도 함께 간다.
+         */
+        RelocateIn: {
+            /** Document Ids */
+            document_ids: string[];
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "move" | "copy";
+            /** Target System */
+            target_system: string;
+            /** Parent Id */
+            parent_id?: string | null;
+            /**
+             * Include Children
+             * @default true
+             */
+            include_children: boolean;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Dry Run
+             * @default false
+             */
+            dry_run: boolean;
+        };
+        /**
+         * RemoveIn
+         * @description 문서를 지우거나 폐지한다. 하위 문서도 함께 정리한다.
+         */
+        RemoveIn: {
+            /** Document Ids */
+            document_ids: string[];
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Dry Run
+             * @default false
+             */
+            dry_run: boolean;
         };
         /** RequirementCounts */
         RequirementCounts: {
@@ -2662,6 +2852,11 @@ export interface components {
             document_count: number;
             /** Actions */
             actions: string[];
+            /**
+             * Delete Blockers
+             * @default []
+             */
+            delete_blockers: string[];
         };
         /** SystemIn */
         SystemIn: {
@@ -2712,6 +2907,13 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** SystemPatch */
+        SystemPatch: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
         };
         /** SystemRef */
         SystemRef: {
@@ -3391,6 +3593,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_system_api_t__tenant_slug__systems__system_slug__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_system_api_t__tenant_slug__systems__system_slug__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SystemPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemOut"];
                 };
             };
             /** @description Validation Error */
@@ -4417,6 +4685,140 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InboxItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_retired_api_t__tenant_slug__systems__system_slug__documents_retired_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                system_slug: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_documents_api_t__tenant_slug__documents_remove_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_document_api_t__tenant_slug__documents__document_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    relocate_documents_api_t__tenant_slug__documents_relocate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tenant_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RelocateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizeOut"];
                 };
             };
             /** @description Validation Error */

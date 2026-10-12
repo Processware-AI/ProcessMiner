@@ -65,6 +65,12 @@ class Document(Base):
     tailoring_reason: Mapped[str] = mapped_column(
         Text, nullable=False, default="", server_default=""
     )
+    # 폐지: 승인된 적 있는 문서는 지우지 않고 폐지로 남긴다. 체계의 문서 목록·커버리지에서 빠진다.
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retired_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    retire_reason: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="SET NULL")
     )

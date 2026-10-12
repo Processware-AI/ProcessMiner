@@ -24,9 +24,11 @@ SYSTEM_ROLES = ("process_owner", "executor", "auditor", "qmr", "admin", "viewer"
 # basis.*: 체계의 근거(적용요건)를 고르고 승인한다. plan.manage: 요건에서 문서를 생성한다.
 # doc.tailor: 상위 체계에서 물려받은 문서를 재정의하거나 제외한다.
 # record.manage: 산출물을 올려 기록으로 정리하고 발행한다(업무를 수행하는 사람도 한다).
+# doc.manage: 문서를 삭제·폐지·되살리거나, 체계 안에서 위치를 옮기거나 다른 체계로 옮긴다.
 _OWNER_ACTIONS = frozenset(
     {
         "doc.create",
+        "doc.manage",
         "doc.tailor",
         "record.manage",
         "doc.edit",
@@ -58,6 +60,8 @@ _TENANT_ADMIN_ACTIONS = frozenset(
         "tenant.archive",
         "tenant.restore",
         "system.create",
+        # 체계의 이름을 바꾸거나, 빈 체계를 삭제한다.
+        "system.manage",
         "member.manage",
         "audit_log.read",
     }

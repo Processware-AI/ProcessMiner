@@ -8,6 +8,7 @@ import { type FormEvent, useMemo, useState } from "react";
 
 import { EmptyState, ErrorState, Field, NativeSelect, PageHeader } from "@/components/bits";
 import { systemTree } from "@/components/shell/app-shell";
+import { orgTree, SystemDialog, type SystemDialogState, SystemMenu } from "@/components/systems/system-dialogs";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,27 +20,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, type OrgUnit, type System, unwrap } from "@/lib/api";
+import { api, type OrgUnit, unwrap } from "@/lib/api";
 import { ORG_KIND_LABEL } from "@/lib/labels";
 import { keys, useOrgUnits, useSystems, useTenant } from "@/lib/queries";
 import { routes } from "@/lib/routes";
-
-function orgTree(units: OrgUnit[]): { unit: OrgUnit; depth: number }[] {
-  const byParent = new Map<string | null, OrgUnit[]>();
-  for (const unit of units) {
-    const key = unit.parent_id ?? null;
-    byParent.set(key, [...(byParent.get(key) ?? []), unit]);
-  }
-  const out: { unit: OrgUnit; depth: number }[] = [];
-  const walk = (parent: string | null, depth: number) => {
-    for (const unit of byParent.get(parent) ?? []) {
-      out.push({ unit, depth });
-      walk(unit.id, depth + 1);
-    }
-  };
-  walk(null, 0);
-  return out;
-}
 
 /** 조직 트리와 프로세스 체계 관리. */
 export default function OrgPage() {
@@ -51,8 +35,9 @@ export default function OrgPage() {
 
   const canManage = tenantQuery.data?.actions.includes("tenant.manage") ?? false;
   const canCreateSystem = tenantQuery.data?.actions.includes("system.create") ?? false;
+  const canManageSystem = tenantQuery.data?.actions.includes("system.manage") ?? false;
   const [unitParent, setUnitParent] = useState<OrgUnit | null>(null);
-  const [systemDialog, setSystemDialog] = useState<{ parent?: System } | null>(null);
+  const [systemDialog, setSystemDialog] = useState<SystemDialogState | null>(null);
 
   const tree = useMemo(() => orgTree(units.data ?? []), [units.data]);
   const unitName = useMemo(
@@ -123,7 +108,7 @@ export default function OrgPage() {
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-sm font-semibold">체계</h2>
           {canCreateSystem && (
-            <Button size="sm" onClick={() => setSystemDialog({})}>
+            <Button size="sm" onClick={() => setSystemDialog({ kind: "create" })}>
               <PlusIcon />새 체계
             </Button>
           )}
@@ -158,12 +143,18 @@ export default function OrgPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setSystemDialog({ parent: system })}
+                    onClick={() => setSystemDialog({ kind: "create", parent: system })}
                   >
                     <PlusIcon />
                     변형 추가
                   </Button>
                 )}
+                <SystemMenu
+                  system={system}
+                  canCreate={false}
+                  canManage={canManageSystem}
+                  onAction={setSystemDialog}
+                />
               </li>
             ))}
           </ul>
@@ -178,18 +169,11 @@ export default function OrgPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={systemDialog !== null} onOpenChange={(open) => !open && setSystemDialog(null)}>
-        <DialogContent>
-          {systemDialog && (
-            <NewSystemForm
-              tenant={tenant}
-              parent={systemDialog.parent}
-              units={tree}
-              onDone={() => setSystemDialog(null)}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      <SystemDialog
+        tenant={tenant}
+        state={systemDialog}
+        onClose={() => setSystemDialog(null)}
+      />
     </div>
   );
 }
@@ -246,102 +230,6 @@ function NewUnitForm({
       <DialogFooter>
         <Button type="submit" disabled={create.isPending}>
           추가
-        </Button>
-      </DialogFooter>
-    </form>
-  );
-}
-
-function NewSystemForm({
-  tenant,
-  parent,
-  units,
-  onDone,
-}: {
-  tenant: string;
-  parent?: System;
-  units: { unit: OrgUnit; depth: number }[];
-  onDone: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const [name, setName] = useState("");
-  const [slug, setSlug] = useState("");
-  const [description, setDescription] = useState("");
-  const [orgUnitId, setOrgUnitId] = useState(parent ? "" : (units[0]?.unit.id ?? ""));
-
-  const create = useMutation({
-    mutationFn: () =>
-      unwrap(
-        api.POST("/api/t/{tenant_slug}/systems", {
-          params: { path: { tenant_slug: tenant } },
-          body: {
-            name: name.trim(),
-            slug,
-            description: description.trim(),
-            org_unit_id: orgUnitId,
-            parent_system_id: parent?.id ?? null,
-          },
-        }),
-      ),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: keys.systems(tenant) });
-      onDone();
-    },
-  });
-
-  function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    create.mutate();
-  }
-
-  return (
-    <form onSubmit={onSubmit} className="grid gap-4">
-      <DialogHeader>
-        <DialogTitle>{parent ? "조직 변형 체계" : "새 체계"}</DialogTitle>
-        <DialogDescription>
-          {parent
-            ? `상위 체계: ${parent.name}. 이 체계를 바탕으로 하는 조직별 체계를 만듭니다. 문서 번호는 상위 체계와 겹치지 않게 매겨집니다.`
-            : "회사 전체에 적용할 기준선 체계를 만듭니다."}
-        </DialogDescription>
-      </DialogHeader>
-      <Field label="이름">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          autoFocus
-          placeholder={parent ? "개발본부 체계" : "통합경영체계"}
-        />
-      </Field>
-      <Field label="주소" hint="영문 소문자·숫자·하이픈. 웹 주소에 쓰입니다.">
-        <Input
-          value={slug}
-          onChange={(e) => setSlug(e.target.value.toLowerCase())}
-          required
-          pattern="[a-z0-9][a-z0-9-]{1,62}"
-          placeholder={parent ? "dev" : "ims"}
-          className="font-mono"
-        />
-      </Field>
-      <Field label="적용 조직">
-        <NativeSelect value={orgUnitId} onChange={(e) => setOrgUnitId(e.target.value)} required>
-          <option value="" disabled>
-            조직 선택
-          </option>
-          {units.map(({ unit, depth }) => (
-            <option key={unit.id} value={unit.id}>
-              {"  ".repeat(depth)}
-              {unit.name}
-            </option>
-          ))}
-        </NativeSelect>
-      </Field>
-      <Field label="설명 (선택)">
-        <Input value={description} onChange={(e) => setDescription(e.target.value)} />
-      </Field>
-      <DialogFooter>
-        <Button type="submit" disabled={create.isPending}>
-          만들기
         </Button>
       </DialogFooter>
     </form>

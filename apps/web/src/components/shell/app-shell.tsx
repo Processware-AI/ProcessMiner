@@ -15,6 +15,7 @@ import {
   MonitorIcon,
   MoonIcon,
   NetworkIcon,
+  PlusIcon,
   ScrollTextIcon,
   SearchIcon,
   SettingsIcon,
@@ -28,6 +29,11 @@ import { type ReactNode, useMemo, useState } from "react";
 
 import { ErrorState, LinkButton } from "@/components/bits";
 import { CommandPalette } from "@/components/shell/command-palette";
+import {
+  SystemDialog,
+  type SystemDialogState,
+  SystemMenu,
+} from "@/components/systems/system-dialogs";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -71,6 +77,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const inboxQuery = useInbox(tenant);
   const [menuOpen, setMenuOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [systemDialog, setSystemDialog] = useState<SystemDialogState | null>(null);
+  const router = useRouter();
 
   const systems = useMemo(() => systemTree(systemsQuery.data ?? []), [systemsQuery.data]);
   const attention = (inboxQuery.data ?? []).filter(
@@ -105,6 +113,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       attention={attention}
       canManage={canOpenSettings}
       canReadAudit={actions.includes("audit_log.read")}
+      canCreateSystem={actions.includes("system.create")}
+      canManageSystem={actions.includes("system.manage")}
+      onSystemAction={(state) => {
+        setMenuOpen(false);
+        setSystemDialog(state);
+      }}
       onNavigate={() => setMenuOpen(false)}
       onSearch={() => {
         setMenuOpen(false);
@@ -177,6 +191,16 @@ export function AppShell({ children }: { children: ReactNode }) {
         </SheetContent>
       </Sheet>
 
+      <SystemDialog
+        tenant={tenant}
+        state={systemDialog}
+        onClose={() => setSystemDialog(null)}
+        onDeleted={(deleted) => {
+          // 보고 있던 체계를 지웠으면 그 화면은 더 열 수 없다.
+          if (deleted.slug === system) router.replace(routes.org(tenant));
+        }}
+      />
+
       <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
@@ -198,6 +222,9 @@ function SidebarNav({
   attention,
   canManage,
   canReadAudit,
+  canCreateSystem,
+  canManageSystem,
+  onSystemAction,
   onNavigate,
   onSearch,
 }: {
@@ -208,6 +235,9 @@ function SidebarNav({
   attention: number;
   canManage: boolean;
   canReadAudit: boolean;
+  canCreateSystem: boolean;
+  canManageSystem: boolean;
+  onSystemAction: (state: SystemDialogState) => void;
   onNavigate: () => void;
   onSearch: () => void;
 }) {
@@ -244,7 +274,23 @@ function SidebarNav({
         </div>
 
         <div className="space-y-0.5">
-          <NavHeading>체계</NavHeading>
+          <NavHeading
+            action={
+              canCreateSystem && (
+                <button
+                  type="button"
+                  aria-label="새 체계"
+                  title="새 체계"
+                  onClick={() => onSystemAction({ kind: "create" })}
+                  className="grid size-5 place-content-center rounded text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground [&_svg]:size-3.5"
+                >
+                  <PlusIcon />
+                </button>
+              )
+            }
+          >
+            체계
+          </NavHeading>
           {loading && <Skeleton className="mx-2 h-7" />}
           {!loading && systems.length === 0 && (
             <p className="px-2 py-1 text-xs text-muted-foreground">아직 체계가 없습니다.</p>
@@ -252,16 +298,25 @@ function SidebarNav({
           {systems.map(({ system, depth }) => {
             const href = routes.library(tenant, system.slug);
             return (
-              <NavLink
-                key={system.id}
-                href={href}
-                active={pathname === href || pathname.startsWith(`${href}/`)}
-                icon={depth === 0 ? <LibraryIcon /> : <FolderTreeIcon />}
-                onNavigate={onNavigate}
-                depth={depth}
-              >
-                {system.name}
-              </NavLink>
+              <div key={system.id} className="group/system relative">
+                <NavLink
+                  href={href}
+                  active={pathname === href || pathname.startsWith(`${href}/`)}
+                  icon={depth === 0 ? <LibraryIcon /> : <FolderTreeIcon />}
+                  onNavigate={onNavigate}
+                  depth={depth}
+                  reserveEnd={canCreateSystem || canManageSystem}
+                >
+                  {system.name}
+                </NavLink>
+                <SystemMenu
+                  system={system}
+                  canCreate={canCreateSystem}
+                  canManage={canManageSystem}
+                  onAction={onSystemAction}
+                  className="absolute top-1 right-1 size-6 opacity-0 group-hover/system:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 max-md:opacity-100"
+                />
+              </div>
             );
           })}
         </div>
@@ -326,8 +381,13 @@ function SidebarNav({
   );
 }
 
-function NavHeading({ children }: { children: ReactNode }) {
-  return <p className="px-2 pb-1 text-xs font-medium text-muted-foreground">{children}</p>;
+function NavHeading({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between px-2 pb-1">
+      <p className="text-xs font-medium text-muted-foreground">{children}</p>
+      {action}
+    </div>
+  );
 }
 
 function NavLink({
@@ -338,6 +398,7 @@ function NavLink({
   onNavigate,
   badge = 0,
   depth = 0,
+  reserveEnd = false,
 }: {
   href: string;
   active: boolean;
@@ -346,6 +407,8 @@ function NavLink({
   onNavigate: () => void;
   badge?: number;
   depth?: number;
+  // 오른쪽 끝에 겹쳐 놓는 버튼(체계 메뉴)이 이름을 가리지 않게 자리를 비운다.
+  reserveEnd?: boolean;
 }) {
   return (
     <Link
@@ -355,6 +418,7 @@ function NavLink({
       style={{ paddingLeft: `${0.5 + depth * 0.875}rem` }}
       className={cn(
         "flex h-8 items-center gap-2 rounded-lg pr-2 text-sm transition-colors [&_svg]:size-4 [&_svg]:shrink-0",
+        reserveEnd && "pr-8",
         active
           ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
           : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",

@@ -158,9 +158,16 @@ class SystemOut(Out):
     created_at: datetime
 
 
+class SystemPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+
+
 class SystemDetail(SystemOut):
     document_count: int
     actions: list[str]
+    # 체계를 삭제할 수 없는 이유. 비어 있으면 삭제할 수 있다.
+    delete_blockers: list[str] = []
 
 
 # ── 구성원 ───────────────────────────────────────────────────────────────────
@@ -283,6 +290,8 @@ class DocumentSummary(BaseModel):
     home_system_name: str = ""
     base_document_id: uuid.UUID | None = None  # 재정의가 대체한 상위 문서
     base_changed: bool = False  # 재정의한 뒤 상위 문서가 개정됨
+    retired_at: datetime | None = None  # 폐지됨(목록·커버리지에서 빠진다)
+    retire_reason: str = ""
 
 
 class DocumentIn(BaseModel):
@@ -362,6 +371,48 @@ class RevisionPatch(BaseModel):
 
 class ReviewIn(BaseModel):
     comment: str = ""
+
+
+class RemoveIn(BaseModel):
+    """문서를 지우거나 폐지한다. 하위 문서도 함께 정리한다."""
+
+    document_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
+    reason: str = Field(default="", max_length=2000)  # 폐지되는 문서가 있으면 필요하다
+    dry_run: bool = False  # 바꾸지 않고 결과만 미리 본다
+
+
+class RelocateIn(BaseModel):
+    """문서를 옮기거나 복사한다. 하위 문서도 함께 간다."""
+
+    document_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
+    mode: Literal["move", "copy"]
+    target_system: str  # 체계 주소(slug). 원래 체계와 같으면 체계 안에서 위치를 바꾼다.
+    parent_id: uuid.UUID | None = None  # 놓을 자리(상위 문서). 정책·참고 문서는 비운다.
+    include_children: bool = True  # 복사할 때만 고를 수 있다. 옮기기는 하위 문서가 항상 따라간다.
+    reason: str = Field(default="", max_length=2000)  # 다른 체계로 옮겨 원본을 폐지할 때 남길 사유
+    dry_run: bool = False
+
+
+class CopiedRef(BaseModel):
+    source: DocumentRef
+    document: DocumentRef
+
+
+class MovedRef(BaseModel):
+    document: DocumentRef
+    old_code: str
+
+
+class OrganizeOut(BaseModel):
+    """정리 결과(또는 dry_run 이면 미리 본 결과)."""
+
+    dry_run: bool
+    deleted: list[DocumentRef] = []
+    retired: list[DocumentRef] = []
+    restored: list[DocumentRef] = []
+    created: list[CopiedRef] = []
+    moved: list[MovedRef] = []
+    target_system: SystemRef | None = None
 
 
 class BatchReviewIn(BaseModel):

@@ -73,7 +73,10 @@ def effective_documents(db: Session, system: ProcessSystem) -> list[Effective]:
         for entry in entries.values():
             entry.state, entry.base, entry.reason = "inherited", None, ""
 
-        own = db.scalars(select(Document).where(Document.system_id == level.id))
+        # 폐지한 문서는 이 체계에서도, 그 아래 체계에서도 쓰이지 않는다.
+        own = db.scalars(
+            select(Document).where(Document.system_id == level.id, Document.retired_at.is_(None))
+        )
         for doc in own:
             target = resolve(doc.overrides_id)
             if target is not None and target in entries:

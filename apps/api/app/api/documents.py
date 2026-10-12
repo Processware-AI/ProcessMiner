@@ -118,13 +118,18 @@ def _detail(ctx: TenantContext, doc: Document, via: ProcessSystem | None = None)
         # 그 체계에서 쓰이지 않는 문서(대체됐거나 상위에서 제외됨)는 문서 자신의 체계 기준으로 본다.
         view = home
         entries = {e.doc.id: e for e in tailoring.effective_documents(db, view)}
+    if doc.id not in entries:
+        # 폐지한 문서는 어느 체계에서도 쓰이지 않는다. 자기 체계에서, 계층 없이 보여준다.
+        state = "own" if home.parent_system_id is None else "added"
+        entries[doc.id] = tailoring.Effective(doc, state, home, parent_id=doc.parent_id)
     entry = entries[doc.id]
     inherited = view.id != doc.system_id
 
     children = [e for e in entries.values() if e.parent_id == doc.id]
     summaries = {s.id: s for s in svc.effective_summaries(db, [entry, *children])}
     chain, parent_id = [], entry.parent_id
-    while parent_id is not None:
+    # 폐지한 문서의 상위가 함께 폐지됐으면 그 위로는 따라가지 않는다.
+    while parent_id is not None and parent_id in entries:
         chain.append(_ref(entries[parent_id].doc))
         parent_id = entries[parent_id].parent_id
 
@@ -291,9 +296,14 @@ def _document_actions(
 ) -> list[str]:
     """요청자가 이 문서에서 지금 할 수 있는 일. 화면은 이 목록으로 버튼을 정한다."""
     sid = doc.system_id
+    if doc.retired_at is not None:
+        return ["restore"] if ctx.can("doc.manage", sid) else []
     actions: list[str] = []
     if ctx.can("doc.create", sid):
         actions += [f"create_child:{t}" for t in allowed_child_types(doc.doc_type)]
+        actions.append("copy")
+    if ctx.can("doc.manage", sid):
+        actions += ["move", "remove"]
     if opened is None:
         if approved is not None and ctx.can("doc.edit", sid):
             actions.append("start_revision")

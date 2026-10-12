@@ -27,6 +27,7 @@ export const keys = {
   revisionRequirements: (tenant: string, revisionId: string) =>
     ["t", tenant, "docs", "revision-requirements", revisionId] as const,
   documents: (tenant: string, system: string) => ["t", tenant, "docs", "list", system] as const,
+  retired: (tenant: string, system: string) => ["t", tenant, "docs", "retired", system] as const,
   decisions: (tenant: string, system: string) => ["t", tenant, "docs", "decisions", system] as const,
   coverage: (tenant: string, system: string) => ["t", tenant, "docs", "coverage", system] as const,
   recordsAll: (tenant: string) => ["t", tenant, "records"] as const,
@@ -144,6 +145,20 @@ export function useDocuments(tenant: string, system: string | undefined) {
       unwrap(
         api.GET("/api/t/{tenant_slug}/systems/{system_slug}/documents", {
           params: { path: { tenant_slug: tenant, system_slug: system! } },
+        }),
+      ),
+  });
+}
+
+/** 이 체계에서 폐지한 문서. 문서 목록에는 나오지 않는다. */
+export function useRetiredDocuments(tenant: string, system: string, enabled = true) {
+  return useQuery({
+    queryKey: keys.retired(tenant, system),
+    enabled,
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/t/{tenant_slug}/systems/{system_slug}/documents/retired", {
+          params: { path: { tenant_slug: tenant, system_slug: system } },
         }),
       ),
   });
