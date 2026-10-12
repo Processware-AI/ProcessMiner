@@ -42,6 +42,8 @@ services:
       PM_MIGRATION_DATABASE_URL: postgresql+psycopg://pm_owner:pm_owner@postgres:5432/processminer
       PM_WEB_BASE_URL: http://localhost:3000
       PM_AUTH_DEV_ECHO: "true"
+      # 요건 도출·문서 생성용. 저장소 루트의 .env(커밋하지 않음)나 셸 환경 변수에서 읽는다.
+      PM_ANTHROPIC_API_KEY: ${PM_ANTHROPIC_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

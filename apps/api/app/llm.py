@@ -7,9 +7,10 @@
 import logging
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import Any
 
 import anthropic
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.config import get_settings
 
@@ -48,19 +49,55 @@ def structured[T: BaseModel](
 ) -> LLMResult[T]:
     """한 번 묻고, schema 에 맞는 답을 받는다."""
     settings = get_settings()
+    request = {
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": [{"role": "user", "content": user}],
+        # output_format 대신 스키마를 직접 넘기고 파싱도 직접 한다. 응답 도중에 다른 모델로
+        # 넘어가면 앞 모델이 쓰다 만 블록이 남는데, SDK 는 그 블록까지 파싱하다 실패한다.
+        "output_config": {
+            "effort": effort or settings.llm_effort,
+            "format": {
+                "type": "json_schema",
+                "schema": anthropic.transform_schema(schema.model_json_schema()),
+            },
+        },
+    }
+    message = _stream(
+        model=settings.llm_model, betas=[_FALLBACK_BETA], fallbacks="default", **request
+    )
+    input_tokens, output_tokens = message.usage.input_tokens, message.usage.output_tokens
+    if _fell_back_midway(message.content):
+        # 넘겨받은 모델은 앞 모델이 쓰다 만 부분을 이미 낸 것으로 보고 나머지만 쓴다.
+        # 앞부분은 잘려 있으므로, 넘겨받은 모델에게 처음부터 다시 쓰게 한다.
+        logger.info("응답 도중 %s 로 넘어가 처음부터 다시 요청합니다.", message.model)
+        message = _stream(model=message.model, **request)
+        input_tokens += message.usage.input_tokens
+        output_tokens += message.usage.output_tokens
+
+    if message.stop_reason == "refusal":
+        raise LLMError("모델이 이 내용의 처리를 거절했습니다.")
+    if message.stop_reason == "max_tokens":
+        raise LLMError("응답이 너무 길어 중간에 끊겼습니다. 더 작은 단위로 나눠 처리해야 합니다.")
+    text = "".join(block.text for block in message.content if block.type == "text")
+    try:
+        output = schema.model_validate_json(text)
+    except ValidationError as exc:
+        raise LLMError("모델 응답을 정해진 형식으로 읽지 못했습니다.") from exc
+
+    return LLMResult(
+        output=output,
+        model=message.model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
+
+
+def _stream(**params: Any) -> Any:
     try:
         # 출력이 길 수 있어 스트리밍으로 받는다(긴 요청의 시간 초과 방지).
-        with get_client().beta.messages.stream(
-            model=settings.llm_model,
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-            output_format=schema,
-            output_config={"effort": effort or settings.llm_effort},
-            betas=[_FALLBACK_BETA],
-            fallbacks="default",
-        ) as stream:
-            message = stream.get_final_message()
+        with get_client().beta.messages.stream(**params) as stream:
+            return stream.get_final_message()
     except anthropic.AuthenticationError as exc:
         raise LLMError("API 키가 올바르지 않습니다. 설정을 확인하세요.") from exc
     except anthropic.PermissionDeniedError as exc:
@@ -74,17 +111,21 @@ def structured[T: BaseModel](
         raise LLMError(f"모델 호출이 실패했습니다({exc.status_code}).") from exc
     except anthropic.APIConnectionError as exc:
         raise LLMError("모델 서버에 연결하지 못했습니다.") from exc
+    except TypeError as exc:
+        # 키도 다른 인증 정보도 없으면 SDK 는 요청을 만들 때 TypeError 를 낸다.
+        if "authentication method" not in str(exc):
+            raise
+        raise LLMError("API 키가 설정되지 않았습니다. PM_ANTHROPIC_API_KEY 를 확인하세요.") from exc
 
-    if message.stop_reason == "refusal":
-        raise LLMError("모델이 이 내용의 처리를 거절했습니다.")
-    if message.stop_reason == "max_tokens":
-        raise LLMError("응답이 너무 길어 중간에 끊겼습니다. 더 작은 단위로 나눠 처리해야 합니다.")
-    if message.parsed_output is None:
-        raise LLMError("모델 응답을 정해진 형식으로 읽지 못했습니다.")
 
-    return LLMResult(
-        output=message.parsed_output,
-        model=message.model,
-        input_tokens=message.usage.input_tokens,
-        output_tokens=message.usage.output_tokens,
-    )
+def _fell_back_midway(content: list) -> bool:
+    """앞 모델이 본문을 쓰다가 거절해 다른 모델로 넘어갔는가.
+
+    처음부터 다른 모델이 응답한 경우(fallback 블록 앞에 본문이 없음)는 해당하지 않는다.
+    """
+    seen_text = False
+    for block in content:
+        if block.type == "fallback" and seen_text:
+            return True
+        seen_text = seen_text or (block.type == "text" and bool(block.text))
+    return False
